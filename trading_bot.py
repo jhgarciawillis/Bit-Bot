@@ -111,10 +111,7 @@ class TradingBot:
         for symbol in symbols:
             try:
                 ticker = self.market_client.get_ticker(symbol)
-                price = float(ticker['price'])
-                prices[symbol] = price
-                crypto = symbol.split('-')[0]
-                self.wallet.update_currency_price("trading", crypto, price)
+                prices[symbol] = float(ticker['price'])
             except Exception as e:
                 logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
                 prices[symbol] = None
