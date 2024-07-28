@@ -217,18 +217,22 @@ class TradingBot:
                 equal_allocation = tradable_usdt / len(self.symbol_allocations)
                 self.symbol_allocations = {symbol: equal_allocation for symbol in self.symbol_allocations}
 
-    def get_current_status(self, prices):
-        logger.debug("Getting current status")
-        current_total_usdt = self.get_account_balance('USDT')
-        for symbol, price in prices.items():
-            crypto_currency = symbol.split('-')[0]
-            if price is not None:
-                current_total_usdt += self.get_account_balance(crypto_currency) * price
-            else:
-                logger.warning(f"Skipping {symbol} in total USDT calculation due to unavailable price")
-
-        liquid_usdt = current_total_usdt * self.usdt_liquid_percentage
-        tradable_usdt = max(current_total_usdt - liquid_usdt, 0)
+    def get_current_prices(self, symbols):
+        logger.debug("Getting current prices")
+        prices = {}
+        for symbol in symbols:
+            try:
+                ticker = self.market_client.get_ticker(symbol)
+                price = float(ticker['price'])
+                prices[symbol] = price
+                crypto = symbol.split('-')[0]
+                self.wallet.update_currency_price("trading", crypto, price)
+            except Exception as e:
+                logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
+                prices[symbol] = None
+        
+        logger.debug(f"Current prices: {prices}")
+        return prices
         
         status = {
             'timestamp': datetime.now(),
