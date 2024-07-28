@@ -2,6 +2,14 @@
 import streamlit as st
 from kucoin.client import Market, Trade, User
 
+AVAILABLE_SYMBOLS = [
+    'BTC-USDT',
+    'ETH-USDT',
+    'ADA-USDT',
+    'DOT-USDT',
+    'XRP-USDT',
+]
+
 def initialize_clients():
     global market_client, trade_client, user_client
 
