@@ -80,7 +80,10 @@ def main():
         bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
 
     # Get user inputs
-    available_symbols = bot.market_client.get_symbol_list()
+    if bot.market_client is not None:
+        available_symbols = bot.market_client.get_symbol_list()
+    else:
+        available_symbols = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
     chosen_symbols = bot.get_user_symbol_choices(available_symbols)
 
     if not chosen_symbols:
