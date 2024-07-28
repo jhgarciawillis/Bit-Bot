@@ -43,6 +43,10 @@ def main():
     # Get user inputs
     chosen_symbols = bot.get_user_symbol_choices(config.AVAILABLE_SYMBOLS)
 
+    if not chosen_symbols:
+        st.warning("Please select at least one symbol to trade.")
+        return
+
     total_usdt = bot.get_account_balance('USDT')
     st.sidebar.write(f"Confirmed USDT Balance: {total_usdt:.2f}")
 
@@ -55,7 +59,7 @@ def main():
 
     # Main trading loop
     if st.sidebar.button("Start Trading"):
-        st.empty()
+        status_placeholder = st.empty()
         while True:
             try:
                 # Fetch current prices
@@ -106,7 +110,12 @@ def main():
 
                 # Update and display status
                 current_status = bot.get_current_status(prices)
-                bot.display_current_status(current_status)
+                status_placeholder.empty()
+                with status_placeholder.container():
+                    bot.display_current_status(current_status)
+
+                # Update allocations based on new total USDT value
+                bot.update_allocations(current_status['current_total_usdt'])
 
                 # Sleep for a short duration before the next iteration
                 time.sleep(1)
