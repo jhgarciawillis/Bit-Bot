@@ -174,19 +174,19 @@ def main():
                 # Update status table
                 status_df = pd.DataFrame({
                     'Symbol': chosen_symbols,
-                    'Current Price': [safe_divide(prices[symbol], 1) for symbol in chosen_symbols],
-                    'Buy Price': [safe_divide(bot.active_trades[list(bot.active_trades.keys())[0]]['buy_price'], 1) if bot.active_trades else 'N/A' for _ in chosen_symbols],
-                    'Target Sell Price': [safe_divide(bot.active_trades[list(bot.active_trades.keys())[0]]['target_sell_price'], 1) if bot.active_trades else 'N/A' for _ in chosen_symbols],
+                    'Current Price': [f"{prices[symbol]:.4f}" if prices[symbol] is not None else "N/A" for symbol in chosen_symbols],
+                    'Buy Price': [f"{bot.active_trades[list(bot.active_trades.keys())[0]]['buy_price']:.4f}" if bot.active_trades else 'N/A' for _ in chosen_symbols],
+                    'Target Sell Price': [f"{bot.active_trades[list(bot.active_trades.keys())[0]]['target_sell_price']:.4f}" if bot.active_trades else 'N/A' for _ in chosen_symbols],
                     'Active Trade': ['Yes' if bot.active_trades else 'No' for _ in chosen_symbols],
-                    'Profit': [safe_divide(bot.profits[symbol], 1) for symbol in chosen_symbols]
+                    'Profit': [f"{bot.profits[symbol]:.4f}" for symbol in chosen_symbols]
                 })
                 status_df = pd.concat([status_df, pd.DataFrame({
                     'Symbol': ['Total', 'Current Total USDT', 'Tradable USDT', 'Liquid USDT'],
-                    'Current Price': ['', safe_divide(current_status['current_total_usdt'], 1), safe_divide(current_status['tradable_usdt'], 1), safe_divide(current_status['liquid_usdt'], 1)],
+                    'Current Price': ['', f"{current_status['current_total_usdt']:.4f}", f"{current_status['tradable_usdt']:.4f}", f"{current_status['liquid_usdt']:.4f}"],
                     'Buy Price': ['', '', '', ''],
                     'Target Sell Price': ['', '', '', ''],
                     'Active Trade': ['', '', '', ''],
-                    'Profit': [safe_divide(bot.total_profit, 1), '', '', '']
+                    'Profit': [f"{bot.total_profit:.4f}", '', '', '']
                 })], ignore_index=True)
 
                 status_table.table(status_df)
