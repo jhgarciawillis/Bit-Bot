@@ -42,6 +42,7 @@ def create_time_series_chart(bot, chosen_symbols, chart_type):
     return fig
 
 def main():
+    st.set_page_config(layout="wide")
     st.title("Cryptocurrency Trading Bot")
 
     # Sidebar for configuration
@@ -71,9 +72,12 @@ def main():
         api_url = "https://api.kucoin.com"
 
     # Initialize the trading bot
-    bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
-    bot.is_simulation = is_simulation
-    bot.initialize_clients()
+    if 'bot' not in st.session_state:
+        st.session_state.bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
+        st.session_state.bot.is_simulation = is_simulation
+        st.session_state.bot.initialize_clients()
+
+    bot = st.session_state.bot
 
     if is_simulation:
         simulated_usdt_balance = st.sidebar.number_input("Simulated USDT Balance", min_value=0.0, value=1000.0, step=0.1)
@@ -116,9 +120,14 @@ def main():
     # Initialize profits dictionary
     bot.profits = {symbol: 0 for symbol in chosen_symbols}
 
+    # Create two columns for layout
+    col1, col2 = st.columns([2, 1])
+
     # Create placeholders for status table, chart, and error messages
-    status_table = st.empty()
-    chart_placeholder = st.empty()
+    with col1:
+        chart_placeholder = st.empty()
+    with col2:
+        status_table = st.empty()
     error_placeholder = st.empty()
 
     # Chart type selection
@@ -191,25 +200,27 @@ def main():
                 status_df = pd.DataFrame({
                     'Symbol': chosen_symbols,
                     'Current Price': [f"{prices[symbol]:.4f}" if prices[symbol] is not None else "N/A" for symbol in chosen_symbols],
-                    'Buy Price': [f"{bot.active_trades[list(bot.active_trades.keys())[0]]['buy_price']:.4f}" if bot.active_trades else 'N/A' for _ in chosen_symbols],
-                    'Target Sell Price': [f"{bot.active_trades[list(bot.active_trades.keys())[0]]['target_sell_price']:.4f}" if bot.active_trades else 'N/A' for _ in chosen_symbols],
-                    'Active Trade': ['Yes' if bot.active_trades else 'No' for _ in chosen_symbols],
-                    'Profit': [f"{bot.profits[symbol]:.4f}" for symbol in chosen_symbols]
+                    'Buy Price': [f"{next((trade['buy_price'] for trade in bot.active_trades.values() if trade['symbol'] == symbol), None):.4f}" if any(trade['symbol'] == symbol for trade in bot.active_trades.values()) else 'N/A' for symbol in chosen_symbols],
+                    'Target Sell Price': [f"{next((trade['target_sell_price'] for trade in bot.active_trades.values() if trade['symbol'] == symbol), None):.4f}" if any(trade['symbol'] == symbol for trade in bot.active_trades.values()) else 'N/A' for symbol in chosen_symbols],
+                    'Current P/L': [f"{(prices[symbol] - next((trade['buy_price'] for trade in bot.active_trades.values() if trade['symbol'] == symbol), prices[symbol])) / next((trade['buy_price'] for trade in bot.active_trades.values() if trade['symbol'] == symbol), prices[symbol]) * 100:.2f}%" if prices[symbol] is not None and any(trade['symbol'] == symbol for trade in bot.active_trades.values()) else 'N/A' for symbol in chosen_symbols],
+                    'Active Trade': ['Yes' if any(trade['symbol'] == symbol for trade in bot.active_trades.values()) else 'No' for symbol in chosen_symbols],
+                    'Realized Profit': [f"{bot.profits[symbol]:.4f}" for symbol in chosen_symbols]
                 })
                 status_df = pd.concat([status_df, pd.DataFrame({
                     'Symbol': ['Total', 'Current Total USDT', 'Tradable USDT', 'Liquid USDT'],
                     'Current Price': ['', f"{current_status['current_total_usdt']:.4f}", f"{current_status['tradable_usdt']:.4f}", f"{current_status['liquid_usdt']:.4f}"],
                     'Buy Price': ['', '', '', ''],
                     'Target Sell Price': ['', '', '', ''],
+                    'Current P/L': ['', '', '', ''],
                     'Active Trade': ['', '', '', ''],
-                    'Profit': [f"{bot.total_profit:.4f}", '', '', '']
+                    'Realized Profit': [f"{bot.total_profit:.4f}", '', '', '']
                 })], ignore_index=True)
 
                 status_table.table(status_df)
 
                 # Update chart
                 fig = create_time_series_chart(bot, chosen_symbols, chart_type)
-                chart_placeholder.plotly_chart(fig)
+                chart_placeholder.plotly_chart(fig, use_container_width=True)
 
                 # Update allocations based on new total USDT value
                 bot.update_allocations(current_status['current_total_usdt'], bot.usdt_liquid_percentage)
