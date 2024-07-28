@@ -99,6 +99,10 @@ def main():
         return
 
     profit_margin = bot.get_profit_margin()
+    if profit_margin is None:
+        st.error("Unable to get profit margin. Please check the logs for more information.")
+        return
+
     bot.num_orders = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
 
     # Initialize profits dictionary
