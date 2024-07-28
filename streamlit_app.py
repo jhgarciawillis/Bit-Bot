@@ -1,4 +1,4 @@
-dimport streamlit as st
+import streamlit as st
 import time
 import threading
 from trading_bot import TradingBot
