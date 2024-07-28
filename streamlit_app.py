@@ -1,6 +1,6 @@
 import streamlit as st
 import time
-from bot import TradingBot
+from trading_bot import TradingBot
 import config
 import pandas as pd
 import plotly.graph_objects as go
