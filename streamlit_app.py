@@ -180,38 +180,14 @@ def main():
                     'Active Trade': ['Yes' if bot.active_trades else 'No' for _ in chosen_symbols],
                     'Profit': [safe_divide(bot.profits[symbol], 1) for symbol in chosen_symbols]
                 })
-                status_df = status_df.append({
-                    'Symbol': 'Total',
-                    'Current Price': '',
-                    'Buy Price': '',
-                    'Target Sell Price': '',
-                    'Active Trade': '',
-                    'Profit': safe_divide(bot.total_profit, 1)
-                }, ignore_index=True)
-                status_df = status_df.append({
-                    'Symbol': 'Current Total USDT',
-                    'Current Price': safe_divide(current_status['current_total_usdt'], 1),
-                    'Buy Price': '',
-                    'Target Sell Price': '',
-                    'Active Trade': '',
-                    'Profit': ''
-                }, ignore_index=True)
-                status_df = status_df.append({
-                    'Symbol': 'Tradable USDT',
-                    'Current Price': safe_divide(current_status['tradable_usdt'], 1),
-                    'Buy Price': '',
-                    'Target Sell Price': '',
-                    'Active Trade': '',
-                    'Profit': ''
-                }, ignore_index=True)
-                status_df = status_df.append({
-                    'Symbol': 'Liquid USDT',
-                    'Current Price': safe_divide(current_status['liquid_usdt'], 1),
-                    'Buy Price': '',
-                    'Target Sell Price': '',
-                    'Active Trade': '',
-                    'Profit': ''
-                }, ignore_index=True)
+                status_df = pd.concat([status_df, pd.DataFrame({
+                    'Symbol': ['Total', 'Current Total USDT', 'Tradable USDT', 'Liquid USDT'],
+                    'Current Price': ['', safe_divide(current_status['current_total_usdt'], 1), safe_divide(current_status['tradable_usdt'], 1), safe_divide(current_status['liquid_usdt'], 1)],
+                    'Buy Price': ['', '', '', ''],
+                    'Target Sell Price': ['', '', '', ''],
+                    'Active Trade': ['', '', '', ''],
+                    'Profit': [safe_divide(bot.total_profit, 1), '', '', '']
+                })], ignore_index=True)
 
                 status_table.table(status_df)
 
