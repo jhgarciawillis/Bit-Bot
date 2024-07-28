@@ -254,15 +254,18 @@ class TradingBot:
             return None
 
         logger.debug("Getting profit margin")
-        total_fee_percentage = self.FEE_RATE * 2 * 100
-        logger.info(f"Total trading fee: {total_fee_percentage:.2f}% (buy + sell)")
-        logger.info("Your profit margin should be higher than this to ensure profitability.")
-        
-        profit_margin = st.sidebar.slider("Profit Margin (%)", min_value=0.1, max_value=10.0, value=1.0, step=0.1) / 100
+        total_fee_percentage = self.FEE_RATE * 2 * 100  # Convert to percentage and account for both buy and sell
+        st.sidebar.write(f"Note: The total trading fee is approximately {total_fee_percentage:.4f}% (buy + sell).")
+        st.sidebar.write("Your profit margin should be higher than this to ensure profitability.")
+
+        profit_margin = st.sidebar.number_input(
+            "Enter the desired profit margin percentage (0-100%)", 
+            min_value=0.0001, max_value=100.0, value=1.0, step=0.0001, format="%.4f") / 100
 
         if profit_margin <= total_fee_percentage / 100:
-            logger.warning(f"Warning: Your chosen profit margin ({profit_margin*100:.2f}%) is lower than or equal to the total fee ({total_fee_percentage:.2f}%).")
-            logger.warning("This may result in losses.")
+            logger.warning(f"Chosen profit margin ({profit_margin*100:.4f}%) is lower than or equal to the total fee ({total_fee_percentage:.4f}%)")
+            st.sidebar.warning(f"Warning: Your chosen profit margin ({profit_margin*100:.4f}%) is lower than or equal to the total fee ({total_fee_percentage:.4f}%).")
+            st.sidebar.warning("This may result in losses.")
 
         return profit_margin
 
