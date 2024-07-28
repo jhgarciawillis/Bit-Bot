@@ -105,29 +105,15 @@ class TradingBot:
         logger.debug(f"Getting account balance for {currency}")
         return self.wallet.get_account("trading").get_currency_balance(currency)
 
-    def get_current_prices(self, symbols):
+        def get_current_prices(self, symbols):
         prices = {}
         for symbol in symbols:
-            retries = 3
-            for _ in range(retries):
-                try:
-                    ticker = self.market_client.get_ticker(symbol)
-                    prices[symbol] = float(ticker['price'])
-                    break
-                except Exception as e:
-                    logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
-                    try:
-                        # Fallback to REST API
-                        response = requests.get(f"{self.api_url}/api/v1/market/ticker?symbol={symbol}")
-                        response.raise_for_status()
-                        prices[symbol] = float(response.json()['data']['price'])
-                        break
-                    except Exception as e:
-                        logger.error(f"Error fetching price for {symbol} from KuCoin REST API: {e}")
-                        if _ == retries - 1:
-                            prices[symbol] = None
-                        else:
-                            time.sleep(1)  # Wait for 1 second before retrying
+            try:
+                ticker = self.market_client.get_ticker(symbol)
+                prices[symbol] = float(ticker['price'])
+            except Exception as e:
+                logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
+                prices[symbol] = None
         
         logger.debug(f"Current prices: {prices}")
         return prices
