@@ -1,19 +1,47 @@
 import streamlit as st
 import time
-from kucoin.client import Market, Trade, User
 from collections import deque
 from statistics import mean, stdev
 from datetime import datetime, timedelta
 import pandas as pd
-from wallet import Wallet, Account, Currency
-from config import PRICE_HISTORY_LENGTH, FEE_RATE
+from kucoin.client import Client
+
+class Currency:
+    def __init__(self, symbol, balance=0):
+        self.symbol = symbol
+        self.balance = balance
+
+class Account:
+    def __init__(self, account_type, currencies=None):
+        self.account_type = account_type
+        self.currencies = currencies or []
+
+    def add_currency(self, currency):
+        self.currencies.append(currency)
+
+    def get_currency_balance(self, symbol):
+        for currency in self.currencies:
+            if currency.symbol == symbol:
+                return currency.balance
+        return 0
+
+class Wallet:
+    def __init__(self, accounts=None):
+        self.accounts = accounts or []
+
+    def add_account(self, account):
+        self.accounts.append(account)
+
+    def get_account_by_type(self, account_type):
+        for account in self.accounts:
+            if account.account_type == account_type:
+                return account
+        return None
 
 class TradingBot:
-    def __init__(self, wallet, market_client, trade_client, user_client):
+    def __init__(self, wallet, api_key, api_secret, api_passphrase):
         self.wallet = wallet
-        self.market_client = market_client
-        self.trade_client = trade_client
-        self.user_client = user_client
+        self.client = Client(api_key, api_secret, api_passphrase)
         self.profits = {}
         self.total_profit = 0
         self.symbol_allocations = {}
@@ -29,13 +57,10 @@ class TradingBot:
         self.profit_margin = 0
 
     def initialize_clients(self, api_key, api_secret, api_passphrase, api_url):
-        self.market_client = Market(url=api_url)
-        self.trade_client = Trade(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
-        self.user_client = User(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
+        self.client = Client(api_key, api_secret, api_passphrase, api_url)
 
-    def get_user_symbol_choices(self):
-        symbols = st.sidebar.multiselect("Select Symbols to Trade", config.AVAILABLE_SYMBOLS)
-        return symbols
+    def get_user_symbol_choices(self, available_symbols):
+        return st.sidebar.multiselect("Select Symbols to Trade", available_symbols)
 
     def get_float_input(self, label, min_value, max_value, default_value, step):
         while True:
@@ -81,7 +106,7 @@ class TradingBot:
         prices = {}
         for symbol in symbols:
             try:
-                ticker = self.market_client.get_ticker(symbol)
+                ticker = self.client.get_ticker(symbol)
                 prices[symbol] = float(ticker['price'])
             except Exception as e:
                 st.error(f"Error fetching price for {symbol}: {e}")
@@ -111,10 +136,9 @@ class TradingBot:
                     trading_account.add_currency(Currency(symbol, amount_crypto))
         else:
             try:
-                order = self.trade_client.create_market_order(symbol, 'buy', funds=amount_usdt)
+                order = self.client.create_market_order(symbol, Client.SIDE_BUY, funds=amount_usdt)
                 order_id = order['orderId']
-                # Fetch the actual execution price
-                order_details = self.trade_client.get_order_details(order_id)
+                order_details = self.client.get_order(order_id)
                 current_price = float(order_details['dealFunds']) / float(order_details['dealSize'])
                 amount_crypto = float(order_details['dealSize'])
                 fee_usdt = float(order_details['fee'])
@@ -143,10 +167,9 @@ class TradingBot:
                 crypto_currency.balance -= amount_crypto
         else:
             try:
-                order = self.trade_client.create_market_order(symbol, 'sell', size=amount_crypto)
+                order = self.client.create_market_order(symbol, Client.SIDE_SELL, size=amount_crypto)
                 order_id = order['orderId']
-                # Fetch the actual execution price
-                order_details = self.trade_client.get_order_details(order_id)
+                order_details = self.client.get_order(order_id)
                 current_price = float(order_details['dealFunds']) / float(order_details['dealSize'])
                 amount_usdt_after_fee = float(order_details['dealFunds'])
                 fee_usdt = float(order_details['fee'])
@@ -169,14 +192,12 @@ class TradingBot:
         price_mean = mean(self.price_history[symbol])
         price_stdev = stdev(self.price_history[symbol]) if len(set(self.price_history[symbol])) > 1 else 0
 
-        # Buy if the price is below the mean and within 1 standard deviation
         return current_price < price_mean and (price_mean - current_price) < price_stdev
 
     def update_allocations(self, total_usdt):
         liquid_usdt = total_usdt * self.usdt_liquid_percentage
-        tradable_usdt = max(total_usdt - liquid_usdt, 0)  # Ensure non-negative
+        tradable_usdt = max(total_usdt - liquid_usdt, 0)
         if tradable_usdt == 0:
-            # Set all allocations to 0 if there's no tradable USDT
             self.symbol_allocations = {symbol: 0 for symbol in self.symbol_allocations}
         else:
             for symbol in self.symbol_allocations:
@@ -215,7 +236,7 @@ class TradingBot:
         return status
 
     def get_profit_margin(self):
-        total_fee_percentage = self.FEE_RATE * 2 * 100  # Convert to percentage and account for both buy and sell
+        total_fee_percentage = self.FEE_RATE * 2 * 100
         st.sidebar.write(f"Note: The total trading fee is approximately {total_fee_percentage:.4f}% (buy + sell).")
         st.sidebar.write("Your profit margin should be higher than this to ensure profitability.")
         
@@ -241,19 +262,16 @@ class TradingBot:
             st.write(f"USDT Liquid Percentage: {latest_status['usdt_liquid_percentage']:.4%}")
             st.write(f"Profit Margin: {latest_status['profit_margin']:.4%}")
 
-            # Display currency balances in the wallet
             st.write("Wallet Balances:")
             trading_account = self.wallet.get_account_by_type("trading")
             if trading_account:
                 for currency in trading_account.currencies:
                     st.write(f"- {currency.symbol}: {currency.balance:.8f}")
 
-            # Display current prices and profits for each symbol
             st.write("Current Prices and Profits:")
             for symbol, price in latest_status['prices'].items():
                 st.write(f"- {symbol}: Price: {price:.4f} USDT, Profit: {latest_status['profits'][symbol]:.4f} USDT")
 
-            # Display status history in a table
             status_df = pd.DataFrame(self.status_history)
             status_df['timestamp'] = status_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
             st.write("Status History:")
