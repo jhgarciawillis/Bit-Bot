@@ -1,9 +1,15 @@
 import streamlit as st
 import time
-from kucoin.client import Market, Trade, User
 from collections import deque
 from statistics import mean, stdev
 from datetime import datetime
+import pandas as pd
+
+try:
+    from kucoin.client import Market, Trade, User
+except ImportError:
+    st.warning("KuCoin client not available. Running in simulation mode only.")
+    Market, Trade, User = None, None, None
 
 class TradingBot:
     def __init__(self, api_key, api_secret, api_passphrase, api_url):
@@ -25,19 +31,23 @@ class TradingBot:
         self.is_simulation = False
         self.num_orders = 1
         self.FEE_RATE = 0.001
+        self.status_history = []
 
     def initialize_clients(self):
-        self.market_client = Market(url=self.api_url)
-        self.trade_client = Trade(key=self.api_key, secret=self.api_secret, passphrase=self.api_passphrase, url=self.api_url)
-        self.user_client = User(key=self.api_key, secret=self.api_secret, passphrase=self.api_passphrase, url=self.api_url)
+        if not self.is_simulation and Market and Trade and User:
+            self.market_client = Market(url=self.api_url)
+            self.trade_client = Trade(key=self.api_key, secret=self.api_secret, passphrase=self.api_passphrase, url=self.api_url)
+            self.user_client = User(key=self.api_key, secret=self.api_secret, passphrase=self.api_passphrase, url=self.api_url)
+        else:
+            st.warning("Running in simulation mode or KuCoin client not available.")
 
     def get_user_symbol_choices(self, available_symbols):
         return st.sidebar.multiselect("Select Symbols to Trade", available_symbols)
 
-    def get_float_input(self, min_value, max_value):
+    def get_float_input(self, label, min_value, max_value, default_value, step):
         while True:
             try:
-                value = st.sidebar.number_input("Enter the percentage of your assets to keep liquid in USDT (0-100%)", min_value=float(min_value), max_value=float(max_value), value=50.0, step=0.1) / 100
+                value = st.sidebar.number_input(label, min_value=float(min_value), max_value=float(max_value), value=float(default_value), step=float(step)) / 100
                 if min_value <= value <= max_value:
                     return value
                 else:
@@ -48,7 +58,7 @@ class TradingBot:
     def get_user_allocations(self, symbols, total_usdt):
         st.sidebar.write(f"Your current USDT balance in trading account: {total_usdt:.2f} USDT")
         
-        self.usdt_liquid_percentage = self.get_float_input(0, 100)
+        self.usdt_liquid_percentage = self.get_float_input("Enter the percentage of your assets to keep liquid in USDT (0-100%)", 0, 100, 50.0, 0.1)
         liquid_usdt = total_usdt * self.usdt_liquid_percentage
         st.sidebar.write(f"Amount to keep liquid in USDT: {liquid_usdt:.2f} USDT")
 
@@ -78,12 +88,18 @@ class TradingBot:
     def get_current_prices(self, symbols):
         prices = {}
         for symbol in symbols:
-            try:
-                ticker = self.market_client.get_ticker(symbol)
-                prices[symbol] = float(ticker['price'])
-            except Exception as e:
-                st.error(f"Error fetching price for {symbol}: {e}")
-                prices[symbol] = None
+            if self.is_simulation:
+                # Simulate price movement
+                last_price = self.price_history[symbol][-1] if symbol in self.price_history and self.price_history[symbol] else 100
+                change = (random.random() - 0.5) * 2  # Random price change between -1% and 1%
+                prices[symbol] = last_price * (1 + change / 100)
+            else:
+                try:
+                    ticker = self.market_client.get_ticker(symbol)
+                    prices[symbol] = float(ticker['price'])
+                except Exception as e:
+                    st.error(f"Error fetching price for {symbol}: {e}")
+                    prices[symbol] = None
         return prices
 
     def place_market_buy_order(self, symbol, amount_usdt):
@@ -170,15 +186,19 @@ class TradingBot:
     def get_current_status(self, prices):
         if self.is_simulation:
             current_total_usdt = self.simulated_balance.get('USDT', 0)
+            for symbol, price in prices.items():
+                current_total_usdt += self.simulated_balance.get(symbol, 0) * price
         else:
             current_total_usdt = self.get_account_balance('USDT')
-            for symbol in prices:
+            for symbol, price in prices.items():
                 crypto_currency = symbol.split('-')[0]
-                current_total_usdt += self.get_account_balance(crypto_currency) * prices[symbol]
+                current_total_usdt += self.get_account_balance(crypto_currency) * price
 
         liquid_usdt = current_total_usdt * self.usdt_liquid_percentage
         tradable_usdt = max(current_total_usdt - liquid_usdt, 0)
-        return {
+        
+        status = {
+            'timestamp': datetime.now(),
             'prices': prices,
             'active_trades': self.active_trades,
             'profits': self.profits.copy(),
@@ -188,6 +208,9 @@ class TradingBot:
             'liquid_usdt': liquid_usdt,
             'simulated_balance': self.simulated_balance.copy() if self.is_simulation else {}
         }
+        
+        self.status_history.append(status)
+        return status
 
     def get_profit_margin(self):
         total_fee_percentage = self.FEE_RATE * 2 * 100
@@ -204,28 +227,39 @@ class TradingBot:
 
     def display_current_status(self, current_status):
         st.write("### Current Status")
-        st.write(f"Current Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        st.write(f"Current Time: {current_status['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
         st.write("Current Prices, Buy Prices, and Target Sell Prices:")
         for symbol, price in current_status['prices'].items():
             st.write(f"- {symbol}:")
-            st.write(f"  - Current Price: {price:.2f} USDT")
+            st.write(f"  - Current Price: {price:.4f} USDT")
             buy_orders = [trade for trade in current_status['active_trades'].values() if trade['symbol'] == symbol]
             if buy_orders:
                 for order in buy_orders:
-                    st.write(f"  - Buy Price: {order['buy_price']:.2f} USDT")
-                    st.write(f"  - Target Sell Price: {order['target_sell_price']:.2f} USDT")
+                    st.write(f"  - Buy Price: {order['buy_price']:.4f} USDT")
+                    st.write(f"  - Target Sell Price: {order['target_sell_price']:.4f} USDT")
             else:
                 st.write("  - No Active Trades")
         st.write(f"Active Trades: {len(current_status['active_trades'])}")
         st.write("Active Trade Details:")
-        for order_id in current_status['active_trades']:
-            st.write(f"- {order_id}")
-        st.write(f"Profits per Trade: {current_status['profits']}")
-        st.write(f"Total Profit: {current_status['total_profit']:.2f} USDT")
-        st.write(f"Current Total USDT: {current_status['current_total_usdt']:.2f}")
-        st.write(f"Tradable USDT: {current_status['tradable_usdt']:.2f}")
-        st.write(f"Liquid USDT (not to be traded): {current_status['liquid_usdt']:.2f}")
+        for order_id, trade in current_status['active_trades'].items():
+            st.write(f"- Order ID: {order_id}")
+            st.write(f"  Symbol: {trade['symbol']}")
+            st.write(f"  Buy Price: {trade['buy_price']:.4f} USDT")
+            st.write(f"  Amount: {trade['amount']:.8f}")
+            st.write(f"  Target Sell Price: {trade['target_sell_price']:.4f} USDT")
+        st.write(f"Profits per Symbol: {current_status['profits']}")
+        st.write(f"Total Profit: {current_status['total_profit']:.4f} USDT")
+        st.write(f"Current Total USDT: {current_status['current_total_usdt']:.4f}")
+        st.write(f"Tradable USDT: {current_status['tradable_usdt']:.4f}")
+        st.write(f"Liquid USDT (not to be traded): {current_status['liquid_usdt']:.4f}")
         if self.is_simulation:
             st.write("Simulated Balances:")
             for currency, balance in current_status['simulated_balance'].items():
                 st.write(f"- {currency}: {balance:.8f}")
+
+        # Display status history in a table
+        if len(self.status_history) > 1:  # Only show if there's more than one status update
+            status_df = pd.DataFrame(self.status_history)
+            status_df['timestamp'] = status_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
+            st.write("Status History:")
+            st.dataframe(status_df)
