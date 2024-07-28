@@ -1,4 +1,4 @@
-Copyright (c) 2024 BitBot
+Copyright (c) 2024 BlockTrader
 
 All rights reserved.
 
