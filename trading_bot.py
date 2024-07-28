@@ -106,21 +106,21 @@ class TradingBot:
         return self.wallet.get_account("trading").get_currency_balance(currency)
 
     def get_current_prices(self, symbols):
-    logger.debug("Getting current prices")
-    prices = {}
-    for symbol in symbols:
-        try:
-            ticker = self.market_client.get_ticker(symbol)
-            price = float(ticker['price'])
-            prices[symbol] = price
-            crypto = symbol.split('-')[0]
-            self.wallet.update_currency_price("trading", crypto, price)
-        except Exception as e:
-            logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
-            prices[symbol] = None
-    
-    logger.debug(f"Current prices: {prices}")
-    return prices
+        logger.debug("Getting current prices")
+        prices = {}
+        for symbol in symbols:
+            try:
+                ticker = self.market_client.get_ticker(symbol)
+                price = float(ticker['price'])
+                prices[symbol] = price
+                crypto = symbol.split('-')[0]
+                self.wallet.update_currency_price("trading", crypto, price)
+            except Exception as e:
+                logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
+                prices[symbol] = None
+        
+        logger.debug(f"Current prices: {prices}")
+        return prices
 
     def place_market_order(self, symbol, amount, order_type):
         logger.debug(f"Placing {order_type} order for {symbol}")
