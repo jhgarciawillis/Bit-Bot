@@ -342,92 +342,92 @@ class TradingBot:
                 logger.exception("Exception traceback:")
                 time.sleep(5)  # Wait for 5 seconds before the next iteration
 
-   def display_current_status(self, current_status):
-       logger.debug("Displaying current status")
-       st.write("### Current Status")
-       st.write(f"Current Time: {current_status['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
+def display_current_status(self, current_status):
+        logger.debug("Displaying current status")
+        st.write("### Current Status")
+        st.write(f"Current Time: {current_status['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
 
-       # Display current prices, buy prices, and target sell prices
-       price_data = []
-       for symbol, price in current_status['prices'].items():
-           row = {"Symbol": symbol, "Current Price": f"{price:.4f} USDT" if price is not None else "N/A"}
-           buy_orders = [trade for trade in current_status['active_trades'].values() if trade['symbol'] == symbol]
-           if buy_orders:
-               row["Buy Price"] = f"{buy_orders[0]['buy_price']:.4f} USDT"
-               row["Target Sell Price"] = f"{buy_orders[0]['target_sell_price']:.4f} USDT"
-           else:
-               row["Buy Price"] = "N/A"
-               row["Target Sell Price"] = "N/A"
-           price_data.append(row)
+        # Display current prices, buy prices, and target sell prices
+        price_data = []
+        for symbol, price in current_status['prices'].items():
+            row = {"Symbol": symbol, "Current Price": f"{price:.4f} USDT" if price is not None else "N/A"}
+            buy_orders = [trade for trade in current_status['active_trades'].values() if trade['symbol'] == symbol]
+            if buy_orders:
+                row["Buy Price"] = f"{buy_orders[0]['buy_price']:.4f} USDT"
+                row["Target Sell Price"] = f"{buy_orders[0]['target_sell_price']:.4f} USDT"
+            else:
+                row["Buy Price"] = "N/A"
+                row["Target Sell Price"] = "N/A"
+            price_data.append(row)
 
-       st.table(pd.DataFrame(price_data))
+        st.table(pd.DataFrame(price_data))
 
-       # Display active trades
-       st.write(f"Active Trades: {len(current_status['active_trades'])}")
-       if current_status['active_trades']:
-           active_trades_data = [
-               {
-                   "Order ID": order_id,
-                   "Symbol": trade['symbol'],
-                   "Buy Price": f"{trade['buy_price']:.4f} USDT",
-                   "Amount": f"{trade['amount']:.8f}",
-                   "Target Sell Price": f"{trade['target_sell_price']:.4f} USDT"
-               }
-               for order_id, trade in current_status['active_trades'].items()
-           ]
-           st.table(pd.DataFrame(active_trades_data))
+        # Display active trades
+        st.write(f"Active Trades: {len(current_status['active_trades'])}")
+        if current_status['active_trades']:
+            active_trades_data = [
+                {
+                    "Order ID": order_id,
+                    "Symbol": trade['symbol'],
+                    "Buy Price": f"{trade['buy_price']:.4f} USDT",
+                    "Amount": f"{trade['amount']:.8f}",
+                    "Target Sell Price": f"{trade['target_sell_price']:.4f} USDT"
+                }
+                for order_id, trade in current_status['active_trades'].items()
+            ]
+            st.table(pd.DataFrame(active_trades_data))
 
-       # Display profits
-       st.write("### Profits")
-       st.write(f"Profits per Symbol: {current_status['profits']}")
-       st.write(f"Total Profit: {current_status['total_profit']:.4f} USDT")
+        # Display profits
+        st.write("### Profits")
+        st.write(f"Profits per Symbol: {current_status['profits']}")
+        st.write(f"Total Profit: {current_status['total_profit']:.4f} USDT")
 
-       # Display account balances
-       st.write("### Account Balances")
-       st.write(f"Current Total USDT: {current_status['current_total_usdt']:.4f}")
-       st.write(f"Tradable USDT: {current_status['tradable_usdt']:.4f}")
-       st.write(f"Liquid USDT (not to be traded): {current_status['liquid_usdt']:.4f}")
+        # Display account balances
+        st.write("### Account Balances")
+        st.write(f"Current Total USDT: {current_status['current_total_usdt']:.4f}")
+        st.write(f"Tradable USDT: {current_status['tradable_usdt']:.4f}")
+        st.write(f"Liquid USDT (not to be traded): {current_status['liquid_usdt']:.4f}")
 
-       # Display wallet summary for simulation mode
-       if self.is_simulation and current_status['wallet_summary']:
-           st.write("### Wallet Summary")
-           for account_type, account_data in current_status['wallet_summary'].items():
-               st.write(f"Account: {account_type}")
-               wallet_data = []
-               for symbol, currency_data in account_data.items():
-                   wallet_data.append({
-                       "Symbol": symbol,
-                       "Balance": f"{currency_data['balance']:.8f}",
-                       "Current Price": f"{currency_data['current_price']:.4f} USDT" if currency_data['current_price'] else "N/A"
-                   })
-               st.table(pd.DataFrame(wallet_data))
+        # Display wallet summary for simulation mode
+        if self.is_simulation and current_status['wallet_summary']:
+            st.write("### Wallet Summary")
+            for account_type, account_data in current_status['wallet_summary'].items():
+                st.write(f"Account: {account_type}")
+                wallet_data = []
+                for symbol, currency_data in account_data.items():
+                    wallet_data.append({
+                        "Symbol": symbol,
+                        "Balance": f"{currency_data['balance']:.8f}",
+                        "Current Price": f"{currency_data['current_price']:.4f} USDT" if currency_data['current_price'] else "N/A"
+                    })
+                st.table(pd.DataFrame(wallet_data))
 
-       # Display historical data as line charts for simulation mode
-       if self.is_simulation:
-           st.write("### Historical Data")
-           for symbol in current_status['prices'].keys():
-               crypto_symbol = symbol.split('-')[0]
-               history = self.wallet.get_currency_history("trading", crypto_symbol)
-               if history and history['price_history']:
-                   df = pd.DataFrame(history['price_history'], columns=['timestamp', 'price'])
-                   df.set_index('timestamp', inplace=True)
-                   st.write(f"{symbol} Price History")
-                   st.line_chart(df)
+        # Display historical data as line charts for simulation mode
+        if self.is_simulation:
+            st.write("### Historical Data")
+            for symbol in current_status['prices'].keys():
+                crypto_symbol = symbol.split('-')[0]
+                history = self.wallet.get_currency_history("trading", crypto_symbol)
+                if history and history['price_history']:
+                    df = pd.DataFrame(history['price_history'], columns=['timestamp', 'price'])
+                    df.set_index('timestamp', inplace=True)
+                    st.write(f"{symbol} Price History")
+                    st.line_chart(df)
 
-                   if history['buy_history'] or history['sell_history']:
-                       trades_df = pd.DataFrame(
-                           history['buy_history'] + history['sell_history'],
-                           columns=['timestamp', 'amount', 'price', 'type']
-                       )
-                       trades_df['type'] = ['buy'] * len(history['buy_history']) + ['sell'] * len(history['sell_history'])
-                       trades_df.set_index('timestamp', inplace=True)
-                       st.write(f"{symbol} Trade History")
-                       st.scatter_chart(trades_df, x='timestamp', y='price', color='type', size='amount')
+                    if history['buy_history'] or history['sell_history']:
+                        trades_df = pd.DataFrame(
+                            history['buy_history'] + history['sell_history'],
+                            columns=['timestamp', 'amount', 'price', 'type']
+                        )
+                        trades_df['type'] = ['buy'] * len(history['buy_history']) + ['sell'] * len(history['sell_history'])
+                        trades_df.set_index('timestamp', inplace=True)
+                        st.write(f"{symbol} Trade History")
+                        st.scatter_chart(trades_df, x='timestamp', y='price', color='type', size='amount')
 
-       # Display status history as a line chart
-       if len(self.status_history) > 1:
-           status_df = pd.DataFrame([(s['timestamp'], s['current_total_usdt']) for s in self.status_history],
-                                   columns=['timestamp', 'total_usdt'])
-           status_df.set_index('timestamp', inplace=True)
-           st.write("Total USDT Value Over Time")
-           st.line_chart(status_df)
+        # Display status history as a line chart
+        if len(self.status_history) > 1:
+            status_df = pd.DataFrame([(s['timestamp'], s['current_total_usdt']) for s in self.status_history],
+                                    columns=['timestamp', 'total_usdt'])
+            status_df.set_index('timestamp', inplace=True)
+            st.write("Total USDT Value Over Time")
+            st.line_chart(status_df)
