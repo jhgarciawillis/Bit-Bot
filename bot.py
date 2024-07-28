@@ -4,6 +4,7 @@ from collections import deque
 from statistics import mean, stdev
 from datetime import datetime
 import pandas as pd
+import random
 
 try:
     from kucoin.client import Market, Trade, User
@@ -47,7 +48,14 @@ class TradingBot:
     def get_float_input(self, label, min_value, max_value, default_value, step):
         while True:
             try:
-                value = st.sidebar.number_input(label, min_value=float(min_value), max_value=float(max_value), value=float(default_value), step=float(step)) / 100
+                value = st.sidebar.number_input(
+                    label,
+                    min_value=float(min_value),
+                    max_value=float(max_value),
+                    value=float(default_value),
+                    step=float(step),
+                    format="%.4f"
+                )
                 if min_value <= value <= max_value:
                     return value
                 else:
@@ -56,14 +64,14 @@ class TradingBot:
                 st.sidebar.error("Please enter a valid number.")
 
     def get_user_allocations(self, symbols, total_usdt):
-        st.sidebar.write(f"Your current USDT balance in trading account: {total_usdt:.2f} USDT")
+        st.sidebar.write(f"Your current USDT balance in trading account: {total_usdt:.4f} USDT")
         
-        self.usdt_liquid_percentage = self.get_float_input("Enter the percentage of your assets to keep liquid in USDT (0-100%)", 0, 100, 50.0, 0.1)
+        self.usdt_liquid_percentage = self.get_float_input("Enter the percentage of your assets to keep liquid in USDT (0-100%)", 0, 100, 50.0, 0.0001) / 100
         liquid_usdt = total_usdt * self.usdt_liquid_percentage
-        st.sidebar.write(f"Amount to keep liquid in USDT: {liquid_usdt:.2f} USDT")
+        st.sidebar.write(f"Amount to keep liquid in USDT: {liquid_usdt:.4f} USDT")
 
         tradable_usdt = total_usdt - liquid_usdt
-        st.sidebar.write(f"USDT available for trading: {tradable_usdt:.2f} USDT")
+        st.sidebar.write(f"USDT available for trading: {tradable_usdt:.4f} USDT")
 
         allocations = {}
         for symbol in symbols:
@@ -187,7 +195,7 @@ class TradingBot:
         if self.is_simulation:
             current_total_usdt = self.simulated_balance.get('USDT', 0)
             for symbol, price in prices.items():
-                current_total_usdt += self.simulated_balance.get(symbol, 0) * price
+                current_total_usdt += self.simulated_balance.get(symbol.split('-')[0], 0) * price
         else:
             current_total_usdt = self.get_account_balance('USDT')
             for symbol, price in prices.items():
@@ -214,16 +222,22 @@ class TradingBot:
 
     def get_profit_margin(self):
         total_fee_percentage = self.FEE_RATE * 2 * 100
-        st.sidebar.write(f"Note: The total trading fee is approximately {total_fee_percentage:.2f}% (buy + sell).")
+        st.sidebar.write(f"Note: The total trading fee is approximately {total_fee_percentage:.4f}% (buy + sell).")
         st.sidebar.write("Your profit margin should be higher than this to ensure profitability.")
         
-        profit_margin = st.sidebar.slider("Profit Margin (%)", min_value=0.1, max_value=10.0, value=1.0, step=0.1) / 100
+        profit_margin = self.get_float_input(
+            "Enter the desired profit margin percentage (0-100%)",
+            0,
+            100,
+            1.0,
+            0.0001
+        )
 
-        if profit_margin <= total_fee_percentage / 100:
-            st.sidebar.warning(f"Warning: Your chosen profit margin ({profit_margin*100:.2f}%) is lower than or equal to the total fee ({total_fee_percentage:.2f}%).")
+        if profit_margin <= total_fee_percentage:
+            st.sidebar.warning(f"Warning: Your chosen profit margin ({profit_margin:.4f}%) is lower than or equal to the total fee ({total_fee_percentage:.4f}%).")
             st.sidebar.warning("This may result in losses.")
 
-        return profit_margin
+        return profit_margin / 100  # Convert percentage to decimal
 
     def display_current_status(self, current_status):
         st.write("### Current Status")
