@@ -98,12 +98,14 @@ def main():
         st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
         return
 
-    profit_margin = bot.get_profit_margin()
+    # Get user input for profit margin and number of orders
+    liquid_usdt_percentage = st.sidebar.number_input("Enter the percentage of your assets to keep liquid in USDT (0-100%)", min_value=0.0, max_value=100.0, value=50.0, step=0.1)
+    profit_margin = st.sidebar.number_input("Enter the desired profit margin percentage (0-100%)", min_value=0.0001, max_value=100.0, value=1.0, step=0.0001) / 100
+    num_orders = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
+
     if profit_margin is None:
         st.error("Unable to get profit margin. Please check the logs for more information.")
         return
-
-    bot.num_orders = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
 
     # Initialize profits dictionary
     bot.profits = {symbol: 0 for symbol in chosen_symbols}
@@ -150,8 +152,8 @@ def main():
                     if base_balance > 0 and bot.should_buy(symbol, current_price):
                         buy_amount_usdt = min(allocated_value, base_balance)
                         if buy_amount_usdt > 0:
-                            order_amount = safe_divide(buy_amount_usdt, bot.num_orders)
-                            for _ in range(bot.num_orders):
+                            order_amount = safe_divide(buy_amount_usdt, num_orders)
+                            for _ in range(num_orders):
                                 order = bot.place_market_buy_order(symbol, order_amount)
                                 if order:
                                     target_sell_price = order['price'] * (1 + profit_margin + 2*bot.FEE_RATE)
@@ -204,7 +206,7 @@ def main():
                 chart_placeholder.plotly_chart(fig)
 
                 # Update allocations based on new total USDT value
-                bot.update_allocations(current_status['current_total_usdt'])
+                bot.update_allocations(current_status['current_total_usdt'], liquid_usdt_percentage)
 
                 # Sleep for a short duration before the next iteration
                 time.sleep(1)
