@@ -78,10 +78,11 @@ class TradingBot:
         tradable_usdt = total_usdt - liquid_usdt
         st.sidebar.write(f"USDT available for trading: {tradable_usdt:.4f} USDT")
 
-        allocations = {}
-        for symbol in symbols:
-            allocations[symbol] = 1 / len(symbols)
+        if tradable_usdt <= 0:
+            st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
+            return {}, 0
 
+        allocations = {symbol: 1 / len(symbols) for symbol in symbols}
         return allocations, tradable_usdt
 
     def get_account_balance(self, currency='USDT'):
@@ -194,8 +195,13 @@ class TradingBot:
         if tradable_usdt == 0:
             self.symbol_allocations = {symbol: 0 for symbol in self.symbol_allocations}
         else:
-            for symbol in self.symbol_allocations:
-                self.symbol_allocations[symbol] = (self.symbol_allocations[symbol] * tradable_usdt) / total_usdt
+            total_allocation = sum(self.symbol_allocations.values())
+            if total_allocation > 0:
+                for symbol in self.symbol_allocations:
+                    self.symbol_allocations[symbol] = (self.symbol_allocations[symbol] / total_allocation) * tradable_usdt
+            else:
+                equal_allocation = tradable_usdt / len(self.symbol_allocations)
+                self.symbol_allocations = {symbol: equal_allocation for symbol in self.symbol_allocations}
 
     def get_current_status(self, prices):
         current_total_usdt = self.get_account_balance('USDT')
