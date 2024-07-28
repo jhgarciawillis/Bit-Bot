@@ -80,7 +80,8 @@ def main():
         bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
 
     # Get user inputs
-    chosen_symbols = bot.get_user_symbol_choices(config.AVAILABLE_SYMBOLS)
+    available_symbols = bot.market_client.get_symbol_list()
+    chosen_symbols = bot.get_user_symbol_choices(available_symbols)
 
     if not chosen_symbols:
         st.warning("Please select at least one symbol to trade.")
