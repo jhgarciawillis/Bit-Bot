@@ -15,7 +15,7 @@ from ui_components import (
 def main():
     st.set_page_config(layout="wide")
     st.title("Cryptocurrency Trading Bot")
-    
+
     api_key, api_secret, api_passphrase, api_url, is_simulation = configure_sidebar()
 
     # Initialize the trading bot
@@ -59,13 +59,6 @@ def main():
         format="%.4f"
     ) / 100
     num_orders = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
-    
-    if profit_margin is None:
-        st.error("Unable to get profit margin. Please check the logs for more information.")
-        return
-
-    # Initialize profits dictionary
-    bot.profits = {symbol: 0 for symbol in chosen_symbols}
 
     # Chart type selection
     chart_type = st.selectbox("Select chart type", ['Price', 'Buy Prices', 'Target Sell Prices', 'Total Profits'])
