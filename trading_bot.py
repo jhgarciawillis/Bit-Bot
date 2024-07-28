@@ -265,7 +265,7 @@ class TradingBot:
             logger.warning("This may result in losses.")
 
         return profit_margin
-
+    
 def display_current_status(self, current_status):
         logger.debug("Displaying current status")
         st.write("### Current Status")
