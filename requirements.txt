@@ -1,6 +1,9 @@
 streamlit==1.37.0
-kucoin-python==1.0.22
 pandas==2.2.2
+numpy==2.0.1
+plotly==5.23.0
+python-binance==1.0.19
+kucoin-python==1.0.22
 python-dateutil==2.9.0.post0
-prettytable==3.10.2
-setuptools==68.0.0
+pytz==2024.1
+requests==2.32.3
