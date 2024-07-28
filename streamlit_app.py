@@ -1,17 +1,3 @@
-import streamlit as st
-import time
-import threading
-from trading_bot import TradingBot
-from chart_utils import create_time_series_chart
-from trading_loop import trading_loop
-from ui_components import (
-    configure_sidebar,
-    initialize_session_state,
-    display_status_table,
-    display_trade_messages,
-    display_error_message
-)
-
 def main():
     st.set_page_config(layout="wide")
     st.title("Cryptocurrency Trading Bot")
@@ -36,17 +22,14 @@ def main():
     else:
         available_symbols = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
     
-    # Move this to the sidebar
     chosen_symbols = st.sidebar.multiselect("Select Symbols to Trade", available_symbols)
-    bot.chosen_symbols = chosen_symbols  # Store chosen symbols in the bot instance
 
     if not chosen_symbols:
         st.warning("Please select at least one symbol to trade.")
         return
 
     total_usdt = bot.get_account_balance('USDT')
-    st.sidebar.write(f"Confirmed USDT Balance: {total_usdt:.4f}")
-
+    
     bot.symbol_allocations, tradable_usdt = bot.get_user_allocations(chosen_symbols, total_usdt)
     if tradable_usdt <= 0:
         st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
