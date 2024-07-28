@@ -106,36 +106,21 @@ class TradingBot:
         return self.wallet.get_account("trading").get_currency_balance(currency)
 
     def get_current_prices(self, symbols):
-        logger.debug("Getting current prices")
-        prices = {}
-        for symbol in symbols:
-            crypto = symbol.split('-')[0].lower()
-            if self.is_simulation:
-                try:
-                    response = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={crypto}&vs_currencies=usd")
-                    data = response.json()
-                    price = data[crypto]['usd']
-                    
-                    # Add a small random fluctuation (0.1% in either direction)
-                    fluctuation = random.uniform(-0.001, 0.001)
-                    price *= (1 + fluctuation)
-                except Exception as e:
-                    logger.error(f"Error fetching price for {symbol} from CoinGecko: {e}")
-                    price = None
-            else:
-                try:
-                    ticker = self.market_client.get_ticker(symbol)
-                    price = float(ticker['price'])
-                except Exception as e:
-                    logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
-                    price = None
-            
+    logger.debug("Getting current prices")
+    prices = {}
+    for symbol in symbols:
+        try:
+            ticker = self.market_client.get_ticker(symbol)
+            price = float(ticker['price'])
             prices[symbol] = price
-            if price is not None:
-                self.wallet.update_currency_price("trading", crypto.upper(), price)
-        
-        logger.debug(f"Current prices: {prices}")
-        return prices
+            crypto = symbol.split('-')[0]
+            self.wallet.update_currency_price("trading", crypto, price)
+        except Exception as e:
+            logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
+            prices[symbol] = None
+    
+    logger.debug(f"Current prices: {prices}")
+    return prices
 
     def place_market_order(self, symbol, amount, order_type):
         logger.debug(f"Placing {order_type} order for {symbol}")
