@@ -1,6 +1,7 @@
 import streamlit as st
 import time
 from bot import TradingBot
+from wallet import Wallet, Account, Currency
 import config
 
 def main():
@@ -32,13 +33,20 @@ def main():
         api_passphrase = st.secrets["API_PASSPHRASE"]
         api_url = st.secrets["API_URL"]
 
+    # Initialize the wallet
+    wallet = Wallet()
+    trading_account = Account("trading")
+    wallet.add_account(trading_account)
+
     # Initialize the trading bot
     bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
     bot.is_simulation = is_simulation
     bot.initialize_clients()
 
     if is_simulation:
-        bot.simulated_balance['USDT'] = st.sidebar.number_input("Simulated USDT Balance", min_value=0.0, value=1000.0, step=0.1)
+        simulated_usdt_balance = st.sidebar.number_input("Simulated USDT Balance", min_value=0.0, value=1000.0, step=0.1)
+        wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
+        bot.simulated_balance['USDT'] = simulated_usdt_balance
 
     # Get user inputs
     chosen_symbols = bot.get_user_symbol_choices(config.AVAILABLE_SYMBOLS)
@@ -47,8 +55,8 @@ def main():
         st.warning("Please select at least one symbol to trade.")
         return
 
-    total_usdt = bot.get_account_balance('USDT')
-    st.sidebar.write(f"Confirmed USDT Balance: {total_usdt:.2f}")
+    total_usdt = wallet.get_account_by_type("trading").get_currency_balance("USDT")
+    st.sidebar.write(f"Confirmed USDT Balance: {total_usdt:.4f}")
 
     bot.symbol_allocations, tradable_usdt = bot.get_user_allocations(chosen_symbols, total_usdt)
     profit_margin = bot.get_profit_margin()
@@ -74,7 +82,7 @@ def main():
 
                     allocated_value = tradable_usdt * bot.symbol_allocations[symbol]
                     base_currency = symbol.split('-')[1]
-                    base_balance = bot.get_account_balance(base_currency)
+                    base_balance = wallet.get_account_by_type("trading").get_currency_balance(base_currency)
 
                     # Check if we should buy
                     if base_balance > 0 and bot.should_buy(symbol, current_price):
@@ -92,7 +100,11 @@ def main():
                                         'target_sell_price': target_sell_price,
                                         'fee_usdt': order['fee_usdt']
                                     }
-                                    st.write(f"Placed buy order for {symbol}: {order_amount:.2f} USDT at {order['price']}, Order ID: {order['orderId']}")
+                                    st.write(f"Placed buy order for {symbol}: {order_amount:.4f} USDT at {order['price']:.4f}, Order ID: {order['orderId']}")
+                                    
+                                    # Update wallet
+                                    wallet.update_account_balance("trading", "USDT", base_balance - order_amount)
+                                    wallet.update_account_balance("trading", symbol.split('-')[0], wallet.get_account_by_type("trading").get_currency_balance(symbol.split('-')[0]) + order['amount'])
 
                     # Check active trades for selling
                     for order_id, trade in list(bot.active_trades.items()):
@@ -105,7 +117,12 @@ def main():
                                 profit = sell_amount_usdt - (trade['amount'] * trade['buy_price']) - total_fee
                                 bot.profits[symbol] += profit
                                 bot.total_profit += profit
-                                st.write(f"Placed sell order for {symbol}: {sell_amount_usdt:.2f} USDT at {sell_order['price']}, Profit: {profit:.2f} USDT, Total Fee: {total_fee:.2f} USDT, Order ID: {sell_order['orderId']}")
+                                st.write(f"Placed sell order for {symbol}: {sell_amount_usdt:.4f} USDT at {sell_order['price']:.4f}, Profit: {profit:.4f} USDT, Total Fee: {total_fee:.4f} USDT, Order ID: {sell_order['orderId']}")
+                                
+                                # Update wallet
+                                wallet.update_account_balance("trading", symbol.split('-')[0], wallet.get_account_by_type("trading").get_currency_balance(symbol.split('-')[0]) - sell_amount_crypto)
+                                wallet.update_account_balance("trading", "USDT", wallet.get_account_by_type("trading").get_currency_balance("USDT") + sell_amount_usdt)
+                                
                                 del bot.active_trades[order_id]
 
                 # Update and display status
