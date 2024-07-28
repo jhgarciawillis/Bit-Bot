@@ -109,12 +109,12 @@ class TradingBot:
         logger.debug("Getting current prices")
         prices = {}
         for symbol in symbols:
-            crypto = symbol.split('-')[0]
+            crypto = symbol.split('-')[0].lower()
             if self.is_simulation:
                 try:
-                    response = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={crypto.lower()}&vs_currencies=usd")
+                    response = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={crypto}&vs_currencies=usd")
                     data = response.json()
-                    price = data[crypto.lower()]['usd']
+                    price = data[crypto]['usd']
                     
                     # Add a small random fluctuation (0.1% in either direction)
                     fluctuation = random.uniform(-0.001, 0.001)
@@ -132,7 +132,7 @@ class TradingBot:
             
             prices[symbol] = price
             if price is not None:
-                self.wallet.update_currency_price("trading", crypto, price)
+                self.wallet.update_currency_price("trading", crypto.upper(), price)
         
         logger.debug(f"Current prices: {prices}")
         return prices
@@ -237,7 +237,10 @@ class TradingBot:
         current_total_usdt = self.get_account_balance('USDT')
         for symbol, price in prices.items():
             crypto_currency = symbol.split('-')[0]
-            current_total_usdt += self.get_account_balance(crypto_currency) * price
+            if price is not None:
+                current_total_usdt += self.get_account_balance(crypto_currency) * price
+            else:
+                logger.warning(f"Skipping {symbol} in total USDT calculation due to unavailable price")
 
         liquid_usdt = current_total_usdt * self.usdt_liquid_percentage
         tradable_usdt = max(current_total_usdt - liquid_usdt, 0)
