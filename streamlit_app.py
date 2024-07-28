@@ -1,17 +1,3 @@
-import streamlit as st
-import time
-import threading
-from trading_bot import TradingBot
-from chart_utils import create_time_series_chart
-from trading_loop import trading_loop
-from ui_components import (
-    configure_sidebar,
-    initialize_session_state,
-    display_status_table,
-    display_trade_messages,
-    display_error_message
-)
-
 def main():
     st.set_page_config(layout="wide")
     st.title("Cryptocurrency Trading Bot")
@@ -59,7 +45,7 @@ def main():
         format="%.4f"
     ) / 100
     num_orders = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
-
+    
     if profit_margin is None:
         st.error("Unable to get profit margin. Please check the logs for more information.")
         return
