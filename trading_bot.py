@@ -105,7 +105,7 @@ class TradingBot:
         logger.debug(f"Getting account balance for {currency}")
         return self.wallet.get_account("trading").get_currency_balance(currency)
 
-        def get_current_prices(self, symbols):
+    def get_current_prices(self, symbols):
         prices = {}
         for symbol in symbols:
             try:
