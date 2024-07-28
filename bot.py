@@ -109,7 +109,11 @@ class TradingBot:
         prices = {}
         for symbol in symbols:
             if self.is_simulation:
-                last_price = self.wallet.get_currency_history("trading", symbol.split('-')[0])['price_history'][-1][1] if self.wallet.get_currency_history("trading", symbol.split('-')[0])['price_history'] else 100
+                currency_history = self.wallet.get_currency_history("trading", symbol.split('-')[0])
+                if currency_history and currency_history['price_history']:
+                    last_price = currency_history['price_history'][-1][1]
+                else:
+                    last_price = 100  # Default price if no history available
                 change = (random.random() - 0.5) * 2  # Random price change between -1% and 1%
                 price = last_price * (1 + change / 100)
             else:
@@ -276,7 +280,7 @@ class TradingBot:
         # Display current prices, buy prices, and target sell prices
         price_data = []
         for symbol, price in current_status['prices'].items():
-            row = {"Symbol": symbol, "Current Price": f"{price:.4f} USDT"}
+            row = {"Symbol": symbol, "Current Price": f"{price:.4f} USDT" if price is not None else "N/A"}
             buy_orders = [trade for trade in current_status['active_trades'].values() if trade['symbol'] == symbol]
             if buy_orders:
                 row["Buy Price"] = f"{buy_orders[0]['buy_price']:.4f} USDT"
@@ -304,10 +308,12 @@ class TradingBot:
             st.table(pd.DataFrame(active_trades_data))
 
         # Display profits
+        st.write("### Profits")
         st.write(f"Profits per Symbol: {current_status['profits']}")
         st.write(f"Total Profit: {current_status['total_profit']:.4f} USDT")
 
         # Display account balances
+        st.write("### Account Balances")
         st.write(f"Current Total USDT: {current_status['current_total_usdt']:.4f}")
         st.write(f"Tradable USDT: {current_status['tradable_usdt']:.4f}")
         st.write(f"Liquid USDT (not to be traded): {current_status['liquid_usdt']:.4f}")
@@ -404,16 +410,19 @@ class TradingBot:
                             sell_amount_crypto = trade['amount']
                             sell_order = self.place_market_sell_order(symbol, sell_amount_crypto)
                             if sell_order:
-                                sell_amount_usdt = sell_order['amount_usdt']
+                                sell_amount_usdt = sell_order['amount']
                                 total_fee = trade['fee_usdt'] + sell_order['fee_usdt']
                                 profit = sell_amount_usdt - (trade['amount'] * trade['buy_price']) - total_fee
-                                self.profits[symbol] += profit
+                                self.profits[symbol] = self.profits.get(symbol, 0) + profit
                                 self.total_profit += profit
                                 logger.info(f"Placed sell order for {symbol}: {sell_amount_usdt:.4f} USDT at {sell_order['price']:.4f}, Profit: {profit:.4f} USDT, Total Fee: {total_fee:.4f} USDT, Order ID: {sell_order['orderId']}")
                                 del self.active_trades[order_id]
 
                 # Update allocations based on new total USDT value
                 self.update_allocations(current_status['current_total_usdt'])
+
+                # Display current status
+                self.display_current_status(current_status)
 
                 # Sleep for a short duration before the next iteration
                 time.sleep(1)
