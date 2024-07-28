@@ -155,6 +155,7 @@ def main():
                                         'fee_usdt': order['fee_usdt'],
                                         'buy_time': datetime.now()
                                     }
+                                    st.write(f"Placed buy order for {symbol}: {order_amount:.4f} USDT at {order['price']:.4f}, Order ID: {order['orderId']}")
 
                     # Check active trades for selling
                     for order_id, trade in list(bot.active_trades.items()):
@@ -167,6 +168,7 @@ def main():
                                 profit = sell_amount_usdt - (trade['amount'] * trade['buy_price']) - total_fee
                                 bot.profits[symbol] += profit
                                 bot.total_profit += profit
+                                st.write(f"Placed sell order for {symbol}: {sell_amount_usdt:.4f} USDT at {sell_order['price']:.4f}, Profit: {profit:.4f} USDT, Total Fee: {total_fee:.4f} USDT, Order ID: {sell_order['orderId']}")
                                 del bot.active_trades[order_id]
 
                 # Update status table
