@@ -109,10 +109,29 @@ class TradingBot:
         prices = {}
         for symbol in symbols:
             try:
+                logger.debug(f"Fetching price for symbol: {symbol}")
                 ticker = self.market_client.get_ticker(symbol)
+                logger.debug(f"Ticker data: {ticker}")
                 prices[symbol] = float(ticker['price'])
+                logger.debug(f"Price for {symbol}: {prices[symbol]}")
             except Exception as e:
                 logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
+                logger.exception("Exception traceback:")
+                
+                # Check if the market_client is None
+                if self.market_client is None:
+                    logger.error("market_client is None, unable to fetch price")
+                
+                # Check the market_client attributes
+                logger.debug(f"market_client attributes: {dir(self.market_client)}")
+                
+                # Check the ticker method
+                try:
+                    logger.debug("Checking if ticker method exists")
+                    self.market_client.get_ticker
+                except AttributeError:
+                    logger.error("market_client does not have get_ticker method")
+                
                 prices[symbol] = None
         
         logger.debug(f"Current prices: {prices}")
