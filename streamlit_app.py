@@ -35,7 +35,10 @@ def main():
         available_symbols = bot.market_client.get_symbol_list()
     else:
         available_symbols = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
-    chosen_symbols = bot.get_user_symbol_choices(available_symbols)
+    
+    # Move this to the sidebar
+    chosen_symbols = st.sidebar.multiselect("Select Symbols to Trade", available_symbols)
+    bot.chosen_symbols = chosen_symbols  # Store chosen symbols in the bot instance
 
     if not chosen_symbols:
         st.warning("Please select at least one symbol to trade.")
