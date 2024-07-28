@@ -5,6 +5,7 @@ import config
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
+import traceback
 
 def safe_divide(numerator, denominator):
     return numerator / denominator if denominator != 0 else 0
@@ -99,9 +100,10 @@ def main():
     # Initialize profits dictionary
     bot.profits = {symbol: 0 for symbol in chosen_symbols}
 
-    # Create placeholders for status table and chart
+    # Create placeholders for status table, chart, and error messages
     status_table = st.empty()
     chart_placeholder = st.empty()
+    error_placeholder = st.empty()
 
     # Chart type selection
     chart_type = st.selectbox("Select chart type", ['Price', 'Buy Prices', 'Target Sell Prices', 'Total Profits'])
@@ -110,8 +112,14 @@ def main():
     if st.sidebar.button("Start Trading"):
         while True:
             try:
+                # Clear previous error messages
+                error_placeholder.empty()
+
                 # Fetch current prices
                 prices = bot.get_current_prices(chosen_symbols)
+                if not prices:
+                    raise ValueError("Failed to fetch current prices")
+
                 bot.update_price_history(chosen_symbols, prices)
 
                 current_status = bot.get_current_status(prices)
@@ -216,9 +224,10 @@ def main():
                 time.sleep(1)
 
             except Exception as e:
-                st.error(f"An error occurred: {e}")
-                st.write("Continuing with the next iteration...")
-                time.sleep(1)
+                error_message = f"An error occurred: {str(e)}\n"
+                error_message += f"Error location:\n{traceback.format_exc()}"
+                error_placeholder.error(error_message)
+                time.sleep(5)  # Wait for 5 seconds before the next iteration
 
 if __name__ == "__main__":
     main()
