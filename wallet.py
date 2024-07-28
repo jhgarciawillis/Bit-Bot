@@ -7,11 +7,13 @@ class Currency:
         self.price_history = []
         self.buy_history = []
         self.sell_history = []
+        self.current_price = None
 
     def update_price(self, price, timestamp=None):
         if timestamp is None:
             timestamp = datetime.now()
         self.price_history.append((timestamp, price))
+        self.current_price = price
 
     def record_buy(self, amount, price, timestamp=None):
         if timestamp is None:
@@ -115,7 +117,7 @@ class Wallet:
             summary[account_type] = {
                 symbol: {
                     'balance': currency.balance,
-                    'current_price': currency.price_history[-1][1] if currency.price_history else None,
+                    'current_price': currency.current_price,
                     'buy_history': currency.buy_history,
                     'sell_history': currency.sell_history
                 } for symbol, currency in account.currencies.items()
