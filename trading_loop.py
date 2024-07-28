@@ -40,6 +40,9 @@ def trading_loop(bot, chosen_symbols, profit_margin, num_orders):
                         for _ in range(num_orders):
                             order = bot.place_market_buy_order(symbol, order_amount)
                             if order:
+                                if bot.is_simulation:
+                                    bot.wallet.simulate_market_buy("trading", symbol.split('-')[0], order_amount, current_price)
+
                                 target_sell_price = order['price'] * (1 + profit_margin + 2*bot.FEE_RATE)
                                 bot.active_trades[order['orderId']] = {
                                     'symbol': symbol,
@@ -57,6 +60,9 @@ def trading_loop(bot, chosen_symbols, profit_margin, num_orders):
                         sell_amount_crypto = trade['amount']
                         sell_order = bot.place_market_sell_order(symbol, sell_amount_crypto)
                         if sell_order:
+                            if bot.is_simulation:
+                                bot.wallet.simulate_market_sell("trading", symbol.split('-')[0], sell_amount_crypto, current_price)
+
                             sell_amount_usdt = sell_order['amount']
                             total_fee = trade['fee_usdt'] + sell_order['fee_usdt']
                             profit = sell_amount_usdt - (trade['amount'] * trade['buy_price']) - total_fee
