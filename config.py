@@ -1,12 +1,3 @@
-# config.py
-import streamlit as st
-from kucoin.client import Market, Trade, User
-import logging
-
-# Set up logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
 def initialize_clients():
     global market_client, trade_client, user_client
 
