@@ -107,23 +107,13 @@ class TradingBot:
 
     def get_current_prices(self, symbols):
         prices = {}
-        if self.market_client is None:
-            logger.error("market_client is None, unable to fetch prices")
-            return {symbol: None for symbol in symbols}
-        
         for symbol in symbols:
             try:
-                logger.debug(f"Fetching price for symbol: {symbol}")
                 ticker = self.market_client.get_ticker(symbol)
-                logger.debug(f"Ticker data: {ticker}")
                 prices[symbol] = float(ticker['price'])
-                logger.debug(f"Price for {symbol}: {prices[symbol]}")
             except Exception as e:
                 logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
-                logger.exception("Exception traceback:")
                 prices[symbol] = None
-        
-        logger.debug(f"Current prices: {prices}")
         return prices
 
     def place_market_order(self, symbol, amount, order_type):
