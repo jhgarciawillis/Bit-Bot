@@ -99,7 +99,6 @@ def main():
         return
 
     # Get user input for profit margin, liquid USDT percentage, and number of orders
-    liquid_usdt_percentage = st.sidebar.number_input("Liquid USDT Percentage (0-100%)", min_value=0.0, max_value=100.0, value=50.0, step=0.1) / 100
     profit_margin = st.sidebar.number_input("Profit Margin Percentage (0-100%)", min_value=0.0001, max_value=100.0, value=1.0, step=0.0001) / 100
     num_orders = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
 
