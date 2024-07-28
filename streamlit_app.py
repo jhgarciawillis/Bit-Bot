@@ -52,6 +52,10 @@ def main():
     st.sidebar.write(f"Confirmed USDT Balance: {total_usdt:.4f}")
 
     bot.symbol_allocations, tradable_usdt = bot.get_user_allocations(chosen_symbols, total_usdt)
+    if tradable_usdt <= 0:
+        st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
+        return
+
     profit_margin = bot.get_profit_margin()
     bot.num_orders = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
 
@@ -67,13 +71,19 @@ def main():
                 prices = bot.get_current_prices(chosen_symbols)
                 bot.update_price_history(chosen_symbols, prices)
 
+                current_status = bot.get_current_status(prices)
+                if current_status['tradable_usdt'] <= 0:
+                    st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
+                    time.sleep(5)  # Wait for 5 seconds before checking again
+                    continue
+
                 for symbol in chosen_symbols:
                     current_price = prices[symbol]
                     if current_price is None:
                         st.warning(f"Skipping {symbol} due to unavailable price data")
                         continue
 
-                    allocated_value = tradable_usdt * bot.symbol_allocations[symbol]
+                    allocated_value = current_status['tradable_usdt'] * bot.symbol_allocations[symbol]
                     base_currency = symbol.split('-')[1]
                     base_balance = bot.get_account_balance(base_currency)
 
@@ -110,7 +120,6 @@ def main():
                                 del bot.active_trades[order_id]
 
                 # Update and display status
-                current_status = bot.get_current_status(prices)
                 status_placeholder.empty()
                 with status_placeholder.container():
                     bot.display_current_status(current_status)
