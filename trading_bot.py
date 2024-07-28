@@ -70,26 +70,32 @@ class TradingBot:
 
     def get_user_allocations(self, symbols, total_usdt):
         logger.debug("Getting user allocations")
-        st.sidebar.write(f"Your current USDT balance in trading account: {total_usdt:.4f} USDT")
         
-        self.usdt_liquid_percentage = st.sidebar.number_input(
-            "Enter the percentage of your assets to keep liquid in USDT (0-100%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=50.0,
-            step=0.0001,
-            format="%.4f"
-        ) / 100
-        
-        liquid_usdt = total_usdt * self.usdt_liquid_percentage
-        st.sidebar.write(f"Amount to keep liquid in USDT: {liquid_usdt:.4f} USDT")
+        if st._is_running_with_streamlit:
+            st.sidebar.write(f"Your current USDT balance in trading account: {total_usdt:.4f} USDT")
+            
+            self.usdt_liquid_percentage = st.sidebar.number_input(
+                "Enter the percentage of your assets to keep liquid in USDT (0-100%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=50.0,
+                step=0.0001,
+                format="%.4f"
+            ) / 100
+            
+            liquid_usdt = total_usdt * self.usdt_liquid_percentage
+            st.sidebar.write(f"Amount to keep liquid in USDT: {liquid_usdt:.4f} USDT")
 
-        tradable_usdt = total_usdt - liquid_usdt
-        st.sidebar.write(f"USDT available for trading: {tradable_usdt:.4f} USDT")
+            tradable_usdt = total_usdt - liquid_usdt
+            st.sidebar.write(f"USDT available for trading: {tradable_usdt:.4f} USDT")
+        else:
+            # For non-Streamlit environments, use default values
+            self.usdt_liquid_percentage = 0.5  # 50% liquid by default
+            liquid_usdt = total_usdt * self.usdt_liquid_percentage
+            tradable_usdt = total_usdt - liquid_usdt
 
         if tradable_usdt <= 0:
             logger.warning("No USDT available for trading")
-            st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
             return {}, 0
 
         allocations = {symbol: 1 / len(symbols) for symbol in symbols}
