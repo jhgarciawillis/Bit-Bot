@@ -1,12 +1,11 @@
 import streamlit as st
+import time
 from bot import TradingBot
 from wallet import Wallet, Account, Currency
 from kucoin.client import Market, Trade, User
 from config import AVAILABLE_SYMBOLS
 
 def main():
-    global total_profit, symbol_allocations, usdt_liquid_percentage, active_trades, num_orders
-
     st.title("Cryptocurrency Trading Bot")
 
     is_simulation = st.sidebar.checkbox("Simulation Mode", value=True)
@@ -38,7 +37,7 @@ def main():
     bot.initialize_clients(st.secrets["API_KEY"], st.secrets["API_SECRET"], st.secrets["API_PASSPHRASE"], st.secrets["API_URL"])
     bot.is_simulation = is_simulation
 
-    chosen_symbols = bot.get_user_symbol_choices(AVAILABLE_SYMBOLS)
+    chosen_symbols = bot.get_user_symbol_choices()
     entry_prices = bot.get_entry_prices(chosen_symbols)
 
     total_usdt = bot.get_account_balance('USDT')
@@ -97,11 +96,11 @@ def main():
                                 total_fee = trade['fee_usdt'] + sell_order['fee_usdt']
                                 profit = sell_amount_usdt - (trade['amount'] * trade['buy_price']) - total_fee
                                 profits[symbol] += profit
-                                total_profit += profit
+                                bot.total_profit += profit
                                 st.write(f"Placed sell order for {symbol}: {sell_amount_usdt:.4f} USDT at {sell_order['price']:.4f}, Profit: {profit:.4f} USDT, Total Fee: {total_fee:.4f} USDT, Order ID: {sell_order['orderId']}")
                                 del bot.active_trades[order_id]
 
-                current_status = bot.get_current_status(prices, bot.active_trades, profits, total_profit)
+                current_status = bot.get_current_status(prices, bot.active_trades, profits, bot.total_profit)
 
                 if current_status != previous_status:
                     st.empty()
