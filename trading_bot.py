@@ -7,6 +7,7 @@ import pandas as pd
 import random
 from wallet import Wallet, Account, Currency
 import logging
+import requests
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -108,25 +109,30 @@ class TradingBot:
         logger.debug("Getting current prices")
         prices = {}
         for symbol in symbols:
+            crypto = symbol.split('-')[0]
             if self.is_simulation:
-                currency_history = self.wallet.get_currency_history("trading", symbol.split('-')[0])
-                if currency_history and currency_history['price_history']:
-                    last_price = currency_history['price_history'][-1][1]
-                else:
-                    last_price = 100  # Default price if no history available
-                change = (random.random() - 0.5) * 2  # Random price change between -1% and 1%
-                price = last_price * (1 + change / 100)
+                try:
+                    response = requests.get(f"https://api.coingecko.com/api/v3/simple/price?ids={crypto.lower()}&vs_currencies=usd")
+                    data = response.json()
+                    price = data[crypto.lower()]['usd']
+                    
+                    # Add a small random fluctuation (0.1% in either direction)
+                    fluctuation = random.uniform(-0.001, 0.001)
+                    price *= (1 + fluctuation)
+                except Exception as e:
+                    logger.error(f"Error fetching price for {symbol} from CoinGecko: {e}")
+                    price = None
             else:
                 try:
                     ticker = self.market_client.get_ticker(symbol)
                     price = float(ticker['price'])
                 except Exception as e:
-                    logger.error(f"Error fetching price for {symbol}: {e}")
+                    logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
                     price = None
             
             prices[symbol] = price
             if price is not None:
-                self.wallet.update_currency_price("trading", symbol.split('-')[0], price)
+                self.wallet.update_currency_price("trading", crypto, price)
         
         logger.debug(f"Current prices: {prices}")
         return prices
