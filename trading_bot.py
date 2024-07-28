@@ -109,11 +109,28 @@ class TradingBot:
         prices = {}
         for symbol in symbols:
             try:
+                logger.debug(f"Fetching price for symbol: {symbol}")
                 ticker = self.market_client.get_ticker(symbol)
+                logger.debug(f"Ticker data: {ticker}")
                 prices[symbol] = float(ticker['price'])
+                logger.debug(f"Price for {symbol}: {prices[symbol]}")
             except Exception as e:
                 logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
-                prices[symbol] = None
+                logger.exception("Exception traceback:")
+                try:
+                    # Fallback to REST API
+                    logger.debug(f"Trying to fetch price for {symbol} using KuCoin REST API")
+                    response = requests.get(f"{self.api_url}/api/v1/market/ticker?symbol={symbol}")
+                    response.raise_for_status()
+                    prices[symbol] = float(response.json()['data']['price'])
+                    logger.debug(f"Fetched price for {symbol} using KuCoin REST API: {prices[symbol]}")
+                except Exception as e:
+                    logger.error(f"Error fetching price for {symbol} from KuCoin REST API: {e}")
+                    logger.exception("Exception traceback:")
+                    prices[symbol] = None
+                    logger.debug(f"Unable to fetch price for {symbol}, setting to None")
+        
+        logger.debug(f"Current prices: {prices}")
         return prices
 
     def place_market_order(self, symbol, amount, order_type):
