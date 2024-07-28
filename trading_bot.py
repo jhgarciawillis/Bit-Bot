@@ -105,33 +105,25 @@ class TradingBot:
         logger.debug(f"Getting account balance for {currency}")
         return self.wallet.get_account("trading").get_currency_balance(currency)
 
-    def get_current_prices(self, symbols):
-        prices = {}
-        for symbol in symbols:
+def get_current_prices(self, symbols):
+    prices = {}
+    for symbol in symbols:
+        try:
+            ticker = self.market_client.get_ticker(symbol)
+            prices[symbol] = float(ticker['price'])
+        except Exception as e:
+            logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
             try:
-                logger.debug(f"Fetching price for symbol: {symbol}")
-                ticker = self.market_client.get_ticker(symbol)
-                logger.debug(f"Ticker data: {ticker}")
-                prices[symbol] = float(ticker['price'])
-                logger.debug(f"Price for {symbol}: {prices[symbol]}")
+                # Fallback to REST API
+                response = requests.get(f"{self.api_url}/api/v1/market/ticker?symbol={symbol}")
+                response.raise_for_status()
+                prices[symbol] = float(response.json()['data']['price'])
             except Exception as e:
-                logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
-                logger.exception("Exception traceback:")
-                try:
-                    # Fallback to REST API
-                    logger.debug(f"Trying to fetch price for {symbol} using KuCoin REST API")
-                    response = requests.get(f"{self.api_url}/api/v1/market/ticker?symbol={symbol}")
-                    response.raise_for_status()
-                    prices[symbol] = float(response.json()['data']['price'])
-                    logger.debug(f"Fetched price for {symbol} using KuCoin REST API: {prices[symbol]}")
-                except Exception as e:
-                    logger.error(f"Error fetching price for {symbol} from KuCoin REST API: {e}")
-                    logger.exception("Exception traceback:")
-                    prices[symbol] = None
-                    logger.debug(f"Unable to fetch price for {symbol}, setting to None")
-        
-        logger.debug(f"Current prices: {prices}")
-        return prices
+                logger.error(f"Error fetching price for {symbol} from KuCoin REST API: {e}")
+                prices[symbol] = None
+    
+    logger.info(f"Current prices: {prices}")
+    return prices
 
     def place_market_order(self, symbol, amount, order_type):
         logger.debug(f"Placing {order_type} order for {symbol}")
