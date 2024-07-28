@@ -153,7 +153,10 @@ class TradingBot:
             order_id = f"sim_{order_type}_{symbol}_{time.time()}"
         else:
             try:
-                order = getattr(self.trade_client, f"create_market_order")(symbol, order_type, funds=amount if order_type == 'buy' else size=amount)
+                if order_type == 'buy':
+                    order = self.trade_client.create_market_order(symbol, 'buy', funds=amount)
+                else:
+                    order = self.trade_client.create_market_order(symbol, 'sell', size=amount)
                 order_id = order['orderId']
                 order_details = self.trade_client.get_order_details(order_id)
                 current_price = float(order_details['dealFunds']) / float(order_details['dealSize'])
