@@ -63,30 +63,19 @@ class TradingBot:
         logger.debug("Getting user symbol choices")
         return st.sidebar.multiselect("Select Symbols to Trade", available_symbols)
 
-    def get_float_input(self, label, min_value, max_value, default_value, step):
-        logger.debug(f"Getting float input for {label}")
-        while True:
-            try:
-                value = st.sidebar.number_input(
-                    label,
-                    min_value=float(min_value),
-                    max_value=float(max_value),
-                    value=float(default_value),
-                    step=float(step),
-                    format="%.4f"
-                )
-                if min_value <= value <= max_value:
-                    return value
-                else:
-                    st.sidebar.error(f"Please enter a value between {min_value} and {max_value}.")
-            except ValueError:
-                st.sidebar.error("Please enter a valid number.")
-
     def get_user_allocations(self, symbols, total_usdt):
         logger.debug("Getting user allocations")
         st.sidebar.write(f"Your current USDT balance in trading account: {total_usdt:.4f} USDT")
         
-        self.usdt_liquid_percentage = self.get_float_input("Enter the percentage of your assets to keep liquid in USDT (0-100%)", 0, 100, 50.0, 0.0001) / 100
+        self.usdt_liquid_percentage = st.sidebar.number_input(
+            "Enter the percentage of your assets to keep liquid in USDT (0-100%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=50.0,
+            step=0.0001,
+            format="%.4f"
+        ) / 100
+        
         liquid_usdt = total_usdt * self.usdt_liquid_percentage
         st.sidebar.write(f"Amount to keep liquid in USDT: {liquid_usdt:.4f} USDT")
 
@@ -250,116 +239,8 @@ class TradingBot:
         self.status_history.append(status)
         return status
 
-    def get_profit_margin(self):
-        total_fee_percentage = self.FEE_RATE * 2 * 100  # Convert to percentage and account for both buy and sell
-        st.sidebar.write(f"Note: The total trading fee is approximately {total_fee_percentage:.4f}% (buy + sell).")
-        st.sidebar.write("Your profit margin should be higher than this to ensure profitability.")
-        
-        profit_margin = st.sidebar.number_input(
-            "Enter the desired profit margin percentage (0-100%)",
-            min_value=0.0001,
-            max_value=100.0,
-            value=1.0,
-            step=0.0001,
-            format="%.4f"
-        ) / 100
-
-        if profit_margin <= total_fee_percentage / 100:
-            st.sidebar.warning(f"Warning: Your chosen profit margin ({profit_margin*100:.4f}%) is lower than or equal to the total fee ({total_fee_percentage:.4f}%).")
-            st.sidebar.warning("This may result in losses.")
-
-        return profit_margin
-
-    def display_current_status(self, current_status):
-            logger.debug("Displaying current status")
-            st.write("### Current Status")
-            st.write(f"Current Time: {current_status['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
-
-            # Display current prices, buy prices, and target sell prices
-            price_data = []
-            for symbol, price in current_status['prices'].items():
-                row = {"Symbol": symbol, "Current Price": f"{price:.4f} USDT" if price is not None else "N/A"}
-                buy_orders = [trade for trade in current_status['active_trades'].values() if trade['symbol'] == symbol]
-                if buy_orders:
-                    row["Buy Price"] = f"{buy_orders[0]['buy_price']:.4f} USDT"
-                    row["Target Sell Price"] = f"{buy_orders[0]['target_sell_price']:.4f} USDT"
-                else:
-                    row["Buy Price"] = "N/A"
-                    row["Target Sell Price"] = "N/A"
-                price_data.append(row)
-
-            st.table(pd.DataFrame(price_data))
-
-            # Display active trades
-            st.write(f"Active Trades: {len(current_status['active_trades'])}")
-            if current_status['active_trades']:
-                active_trades_data = [
-                    {
-                        "Order ID": order_id,
-                        "Symbol": trade['symbol'],
-                        "Buy Price": f"{trade['buy_price']:.4f} USDT",
-                        "Amount": f"{trade['amount']:.8f}",
-                        "Target Sell Price": f"{trade['target_sell_price']:.4f} USDT"
-                    }
-                    for order_id, trade in current_status['active_trades'].items()
-                ]
-                st.table(pd.DataFrame(active_trades_data))
-
-            # Display profits
-            st.write("### Profits")
-            st.write(f"Profits per Symbol: {current_status['profits']}")
-            st.write(f"Total Profit: {current_status['total_profit']:.4f} USDT")
-
-            # Display account balances
-            st.write("### Account Balances")
-            st.write(f"Current Total USDT: {current_status['current_total_usdt']:.4f}")
-            st.write(f"Tradable USDT: {current_status['tradable_usdt']:.4f}")
-            st.write(f"Liquid USDT (not to be traded): {current_status['liquid_usdt']:.4f}")
-
-            # Display wallet summary
-            st.write("### Wallet Summary")
-            for account_type, account_data in current_status['wallet_summary'].items():
-                st.write(f"Account: {account_type}")
-                wallet_data = []
-                for symbol, currency_data in account_data.items():
-                    wallet_data.append({
-                        "Symbol": symbol,
-                        "Balance": f"{currency_data['balance']:.8f}",
-                        "Current Price": f"{currency_data['current_price']:.4f} USDT" if currency_data['current_price'] else "N/A"
-                    })
-                st.table(pd.DataFrame(wallet_data))
-
-            # Display historical data as line charts
-            st.write("### Historical Data")
-            for symbol in current_status['prices'].keys():
-                crypto_symbol = symbol.split('-')[0]
-                history = self.wallet.get_currency_history("trading", crypto_symbol)
-                if history and history['price_history']:
-                    df = pd.DataFrame(history['price_history'], columns=['timestamp', 'price'])
-                    df.set_index('timestamp', inplace=True)
-                    st.write(f"{symbol} Price History")
-                    st.line_chart(df)
-
-                    if history['buy_history'] or history['sell_history']:
-                        trades_df = pd.DataFrame(
-                            history['buy_history'] + history['sell_history'],
-                            columns=['timestamp', 'amount', 'price', 'type']
-                        )
-                        trades_df['type'] = ['buy'] * len(history['buy_history']) + ['sell'] * len(history['sell_history'])
-                        trades_df.set_index('timestamp', inplace=True)
-                        st.write(f"{symbol} Trade History")
-                        st.scatter_chart(trades_df, x='timestamp', y='price', color='type', size='amount')
-
-            # Display status history as a line chart
-            if len(self.status_history) > 1:
-                status_df = pd.DataFrame([(s['timestamp'], s['current_total_usdt']) for s in self.status_history],
-                                        columns=['timestamp', 'total_usdt'])
-                status_df.set_index('timestamp', inplace=True)
-                st.write("Total USDT Value Over Time")
-                st.line_chart(status_df)
-
-    def run_trading_loop(self, chosen_symbols, profit_margin):
-        logger.info("Starting trading loop")
+def start_trading(self, chosen_symbols, profit_margin):
+        logger.info("Starting trading")
         while True:
             try:
                 # Fetch current prices
@@ -419,9 +300,6 @@ class TradingBot:
                 # Update allocations based on new total USDT value
                 self.update_allocations(current_status['current_total_usdt'], self.usdt_liquid_percentage)
 
-                # Display current status
-                self.display_current_status(current_status)
-
                 # Sleep for a short duration before the next iteration
                 time.sleep(1)
 
@@ -430,6 +308,90 @@ class TradingBot:
                 logger.exception("Exception traceback:")
                 time.sleep(5)  # Wait for 5 seconds before the next iteration
 
-    def start_trading(self, chosen_symbols, profit_margin):
-        logger.info("Starting trading")
-        self.run_trading_loop(chosen_symbols, profit_margin)
+    def display_current_status(self, current_status):
+        logger.debug("Displaying current status")
+        st.write("### Current Status")
+        st.write(f"Current Time: {current_status['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
+
+        # Display current prices, buy prices, and target sell prices
+        price_data = []
+        for symbol, price in current_status['prices'].items():
+            row = {"Symbol": symbol, "Current Price": f"{price:.4f} USDT" if price is not None else "N/A"}
+            buy_orders = [trade for trade in current_status['active_trades'].values() if trade['symbol'] == symbol]
+            if buy_orders:
+                row["Buy Price"] = f"{buy_orders[0]['buy_price']:.4f} USDT"
+                row["Target Sell Price"] = f"{buy_orders[0]['target_sell_price']:.4f} USDT"
+            else:
+                row["Buy Price"] = "N/A"
+                row["Target Sell Price"] = "N/A"
+            price_data.append(row)
+
+        st.table(pd.DataFrame(price_data))
+
+        # Display active trades
+        st.write(f"Active Trades: {len(current_status['active_trades'])}")
+        if current_status['active_trades']:
+            active_trades_data = [
+                {
+                    "Order ID": order_id,
+                    "Symbol": trade['symbol'],
+                    "Buy Price": f"{trade['buy_price']:.4f} USDT",
+                    "Amount": f"{trade['amount']:.8f}",
+                    "Target Sell Price": f"{trade['target_sell_price']:.4f} USDT"
+                }
+                for order_id, trade in current_status['active_trades'].items()
+            ]
+            st.table(pd.DataFrame(active_trades_data))
+
+        # Display profits
+        st.write("### Profits")
+        st.write(f"Profits per Symbol: {current_status['profits']}")
+        st.write(f"Total Profit: {current_status['total_profit']:.4f} USDT")
+
+        # Display account balances
+        st.write("### Account Balances")
+        st.write(f"Current Total USDT: {current_status['current_total_usdt']:.4f}")
+        st.write(f"Tradable USDT: {current_status['tradable_usdt']:.4f}")
+        st.write(f"Liquid USDT (not to be traded): {current_status['liquid_usdt']:.4f}")
+
+        # Display wallet summary
+        st.write("### Wallet Summary")
+        for account_type, account_data in current_status['wallet_summary'].items():
+            st.write(f"Account: {account_type}")
+            wallet_data = []
+            for symbol, currency_data in account_data.items():
+                wallet_data.append({
+                    "Symbol": symbol,
+                    "Balance": f"{currency_data['balance']:.8f}",
+                    "Current Price": f"{currency_data['current_price']:.4f} USDT" if currency_data['current_price'] else "N/A"
+                })
+            st.table(pd.DataFrame(wallet_data))
+
+        # Display historical data as line charts
+        st.write("### Historical Data")
+        for symbol in current_status['prices'].keys():
+            crypto_symbol = symbol.split('-')[0]
+            history = self.wallet.get_currency_history("trading", crypto_symbol)
+            if history and history['price_history']:
+                df = pd.DataFrame(history['price_history'], columns=['timestamp', 'price'])
+                df.set_index('timestamp', inplace=True)
+                st.write(f"{symbol} Price History")
+                st.line_chart(df)
+
+                if history['buy_history'] or history['sell_history']:
+                    trades_df = pd.DataFrame(
+                        history['buy_history'] + history['sell_history'],
+                        columns=['timestamp', 'amount', 'price', 'type']
+                    )
+                    trades_df['type'] = ['buy'] * len(history['buy_history']) + ['sell'] * len(history['sell_history'])
+                    trades_df.set_index('timestamp', inplace=True)
+                    st.write(f"{symbol} Trade History")
+                    st.scatter_chart(trades_df, x='timestamp', y='price', color='type', size='amount')
+
+        # Display status history as a line chart
+        if len(self.status_history) > 1:
+            status_df = pd.DataFrame([(s['timestamp'], s['current_total_usdt']) for s in self.status_history],
+                                    columns=['timestamp', 'total_usdt'])
+            status_df.set_index('timestamp', inplace=True)
+            st.write("Total USDT Value Over Time")
+            st.line_chart(status_df)
