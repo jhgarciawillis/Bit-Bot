@@ -56,8 +56,14 @@ class TradingBot:
                 logger.info("Clients initialized successfully")
             except Exception as e:
                 logger.error(f"Error initializing clients: {e}")
+                self.market_client = None
+                self.trade_client = None
+                self.user_client = None
         else:
             logger.warning("Running in simulation mode or KuCoin client not available.")
+            self.market_client = None
+            self.trade_client = None
+            self.user_client = None
 
     def get_user_symbol_choices(self, available_symbols):
         logger.debug("Getting user symbol choices")
@@ -98,20 +104,17 @@ class TradingBot:
         prices = {}
         for symbol in symbols:
             try:
-                # Try the original format first
-                ticker = self.market_client.get_ticker(symbol)
-                prices[symbol] = float(ticker['price'])
-            except Exception as e:
-                logger.error(f"Error fetching price for {symbol} from KuCoin: {e}")
-                try:
-                    # If the original format fails, try without the hyphen
-                    symbol_without_hyphen = symbol.replace('-', '')
-                    response = requests.get(f"{self.api_url}/api/v1/market/orderbook/level1?symbol={symbol_without_hyphen}")
+                if self.market_client:
+                    ticker = self.market_client.get_ticker(symbol)
+                    prices[symbol] = float(ticker['price'])
+                else:
+                    # Fallback to REST API if market_client is not available
+                    response = requests.get(f"{self.api_url}/api/v1/market/orderbook/level1?symbol={symbol}")
                     response.raise_for_status()
                     prices[symbol] = float(response.json()['data']['price'])
-                except Exception as e:
-                    logger.error(f"Error fetching price for {symbol} from KuCoin REST API: {e}")
-                    prices[symbol] = None
+            except Exception as e:
+                logger.error(f"Error fetching price for {symbol}: {e}")
+                prices[symbol] = None
         
         logger.info(f"Current prices: {prices}")
         return prices
