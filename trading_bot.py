@@ -251,21 +251,20 @@ class TradingBot:
         return status
 
     def get_profit_margin(self):
-        if self.market_client is None:
-            logger.error("market_client is None, unable to get profit margin")
-            return None
-
-        logger.debug("Getting profit margin")
         total_fee_percentage = self.FEE_RATE * 2 * 100  # Convert to percentage and account for both buy and sell
         st.sidebar.write(f"Note: The total trading fee is approximately {total_fee_percentage:.4f}% (buy + sell).")
         st.sidebar.write("Your profit margin should be higher than this to ensure profitability.")
         
         profit_margin = st.sidebar.number_input(
             "Enter the desired profit margin percentage (0-100%)",
-            min_value=0.0001, max_value=100.0, value=1.0, step=0.0001) / 100
+            min_value=0.0001,
+            max_value=100.0,
+            value=1.0,
+            step=0.0001,
+            format="%.4f"
+        ) / 100
 
         if profit_margin <= total_fee_percentage / 100:
-            logger.warning(f"Chosen profit margin ({profit_margin*100:.4f}%) is lower than or equal to the total fee ({total_fee_percentage:.4f}%)")
             st.sidebar.warning(f"Warning: Your chosen profit margin ({profit_margin*100:.4f}%) is lower than or equal to the total fee ({total_fee_percentage:.4f}%).")
             st.sidebar.warning("This may result in losses.")
 
