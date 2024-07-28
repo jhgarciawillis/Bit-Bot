@@ -1,11 +1,12 @@
 import time
+import streamlit as st
+import requests
 from collections import deque
 from statistics import mean, stdev
 from datetime import datetime, timedelta
 import pandas as pd
 import random
 import logging
-import requests
 from wallet import Wallet, Account, Currency
 
 try:
