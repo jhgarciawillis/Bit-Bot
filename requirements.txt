@@ -3,3 +3,4 @@ kucoin-python==1.0.22
 pandas==2.2.2
 python-dateutil==2.9.0.post0
 prettytable==3.10.2
+setuptools==68.0.0
