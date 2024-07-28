@@ -2,6 +2,43 @@ import streamlit as st
 import time
 from bot import TradingBot
 import config
+import pandas as pd
+import plotly.graph_objects as go
+from datetime import datetime
+
+def safe_divide(numerator, denominator):
+    return numerator / denominator if denominator != 0 else 0
+
+def create_time_series_chart(bot, chosen_symbols, chart_type):
+    fig = go.Figure()
+    
+    for symbol in chosen_symbols:
+        history = bot.wallet.get_currency_history("trading", symbol.split('-')[0])
+        if history and history['price_history']:
+            df = pd.DataFrame(history['price_history'], columns=['timestamp', 'price'])
+            df.set_index('timestamp', inplace=True)
+            
+            if chart_type == 'Price':
+                fig.add_trace(go.Scatter(x=df.index, y=df['price'], mode='lines', name=f'{symbol} Price'))
+            
+            if chart_type in ['Buy Prices', 'Target Sell Prices']:
+                for trade in bot.active_trades.values():
+                    if trade['symbol'] == symbol:
+                        if chart_type == 'Buy Prices':
+                            fig.add_trace(go.Scatter(x=[trade['buy_time']], y=[trade['buy_price']], 
+                                                     mode='markers', name=f'{symbol} Buy', marker_symbol='triangle-up'))
+                        else:
+                            fig.add_trace(go.Scatter(x=[trade['buy_time']], y=[trade['target_sell_price']], 
+                                                     mode='markers', name=f'{symbol} Target Sell', marker_symbol='triangle-down'))
+    
+    if chart_type == 'Total Profits':
+        profit_history = [(status['timestamp'], status['total_profit']) for status in bot.status_history]
+        df = pd.DataFrame(profit_history, columns=['timestamp', 'total_profit'])
+        df.set_index('timestamp', inplace=True)
+        fig.add_trace(go.Scatter(x=df.index, y=df['total_profit'], mode='lines', name='Total Profit'))
+    
+    fig.update_layout(title=f'{chart_type} Over Time', xaxis_title='Time', yaxis_title='Value')
+    return fig
 
 def main():
     st.title("Cryptocurrency Trading Bot")
@@ -62,9 +99,15 @@ def main():
     # Initialize profits dictionary
     bot.profits = {symbol: 0 for symbol in chosen_symbols}
 
+    # Create placeholders for status table and chart
+    status_table = st.empty()
+    chart_placeholder = st.empty()
+
+    # Chart type selection
+    chart_type = st.selectbox("Select chart type", ['Price', 'Buy Prices', 'Target Sell Prices', 'Total Profits'])
+
     # Main trading loop
     if st.sidebar.button("Start Trading"):
-        status_placeholder = st.empty()
         while True:
             try:
                 # Fetch current prices
@@ -83,7 +126,7 @@ def main():
                         st.warning(f"Skipping {symbol} due to unavailable price data")
                         continue
 
-                    allocated_value = current_status['tradable_usdt'] * bot.symbol_allocations[symbol]
+                    allocated_value = safe_divide(current_status['tradable_usdt'] * bot.symbol_allocations[symbol], 1)
                     base_currency = symbol.split('-')[1]
                     base_balance = bot.get_account_balance(base_currency)
 
@@ -91,7 +134,7 @@ def main():
                     if base_balance > 0 and bot.should_buy(symbol, current_price):
                         buy_amount_usdt = min(allocated_value, base_balance)
                         if buy_amount_usdt > 0:
-                            order_amount = buy_amount_usdt / bot.num_orders
+                            order_amount = safe_divide(buy_amount_usdt, bot.num_orders)
                             for _ in range(bot.num_orders):
                                 order = bot.place_market_buy_order(symbol, order_amount)
                                 if order:
@@ -101,9 +144,9 @@ def main():
                                         'buy_price': order['price'],
                                         'amount': order['amount'],
                                         'target_sell_price': target_sell_price,
-                                        'fee_usdt': order['fee_usdt']
+                                        'fee_usdt': order['fee_usdt'],
+                                        'buy_time': datetime.now()
                                     }
-                                    st.write(f"Placed buy order for {symbol}: {order_amount:.4f} USDT at {order['price']:.4f}, Order ID: {order['orderId']}")
 
                     # Check active trades for selling
                     for order_id, trade in list(bot.active_trades.items()):
@@ -116,13 +159,55 @@ def main():
                                 profit = sell_amount_usdt - (trade['amount'] * trade['buy_price']) - total_fee
                                 bot.profits[symbol] += profit
                                 bot.total_profit += profit
-                                st.write(f"Placed sell order for {symbol}: {sell_amount_usdt:.4f} USDT at {sell_order['price']:.4f}, Profit: {profit:.4f} USDT, Total Fee: {total_fee:.4f} USDT, Order ID: {sell_order['orderId']}")
                                 del bot.active_trades[order_id]
 
-                # Update and display status
-                status_placeholder.empty()
-                with status_placeholder.container():
-                    bot.display_current_status(current_status)
+                # Update status table
+                status_df = pd.DataFrame({
+                    'Symbol': chosen_symbols,
+                    'Current Price': [safe_divide(prices[symbol], 1) for symbol in chosen_symbols],
+                    'Buy Price': [safe_divide(bot.active_trades[list(bot.active_trades.keys())[0]]['buy_price'], 1) if bot.active_trades else 'N/A' for _ in chosen_symbols],
+                    'Target Sell Price': [safe_divide(bot.active_trades[list(bot.active_trades.keys())[0]]['target_sell_price'], 1) if bot.active_trades else 'N/A' for _ in chosen_symbols],
+                    'Active Trade': ['Yes' if bot.active_trades else 'No' for _ in chosen_symbols],
+                    'Profit': [safe_divide(bot.profits[symbol], 1) for symbol in chosen_symbols]
+                })
+                status_df = status_df.append({
+                    'Symbol': 'Total',
+                    'Current Price': '',
+                    'Buy Price': '',
+                    'Target Sell Price': '',
+                    'Active Trade': '',
+                    'Profit': safe_divide(bot.total_profit, 1)
+                }, ignore_index=True)
+                status_df = status_df.append({
+                    'Symbol': 'Current Total USDT',
+                    'Current Price': safe_divide(current_status['current_total_usdt'], 1),
+                    'Buy Price': '',
+                    'Target Sell Price': '',
+                    'Active Trade': '',
+                    'Profit': ''
+                }, ignore_index=True)
+                status_df = status_df.append({
+                    'Symbol': 'Tradable USDT',
+                    'Current Price': safe_divide(current_status['tradable_usdt'], 1),
+                    'Buy Price': '',
+                    'Target Sell Price': '',
+                    'Active Trade': '',
+                    'Profit': ''
+                }, ignore_index=True)
+                status_df = status_df.append({
+                    'Symbol': 'Liquid USDT',
+                    'Current Price': safe_divide(current_status['liquid_usdt'], 1),
+                    'Buy Price': '',
+                    'Target Sell Price': '',
+                    'Active Trade': '',
+                    'Profit': ''
+                }, ignore_index=True)
+
+                status_table.table(status_df)
+
+                # Update chart
+                fig = create_time_series_chart(bot, chosen_symbols, chart_type)
+                chart_placeholder.plotly_chart(fig)
 
                 # Update allocations based on new total USDT value
                 bot.update_allocations(current_status['current_total_usdt'])
