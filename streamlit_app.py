@@ -65,10 +65,10 @@ def main():
             return
 
         # Use secrets for API credentials in live mode
-        api_key = st.secrets["API_KEY"]
-        api_secret = st.secrets["API_SECRET"]
-        api_passphrase = st.secrets["API_PASSPHRASE"]
-        api_url = st.secrets["API_URL"]
+        api_key = st.secrets["api_credentials"]["api_key"]
+        api_secret = st.secrets["api_credentials"]["api_secret"]
+        api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
+        api_url = "https://api.kucoin.com"
 
     # Initialize the trading bot
     bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
@@ -98,8 +98,15 @@ def main():
         st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
         return
 
-    # Get user input for profit margin, liquid USDT percentage, and number of orders
-    profit_margin = st.sidebar.number_input("Profit Margin Percentage (0-100%)", min_value=0.0001, max_value=100.0, value=1.0, step=0.0001) / 100
+    # Get user input for profit margin and number of orders
+    profit_margin = st.sidebar.number_input(
+        "Profit Margin Percentage (0-100%)",
+        min_value=0.0001,
+        max_value=100.0,
+        value=1.0,
+        step=0.0001,
+        format="%.4f"
+    ) / 100
     num_orders = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
 
     if profit_margin is None:
@@ -205,7 +212,7 @@ def main():
                 chart_placeholder.plotly_chart(fig)
 
                 # Update allocations based on new total USDT value
-                bot.update_allocations(current_status['current_total_usdt'], liquid_usdt_percentage)
+                bot.update_allocations(current_status['current_total_usdt'], bot.usdt_liquid_percentage)
 
                 # Sleep for a short duration before the next iteration
                 time.sleep(1)
