@@ -19,12 +19,6 @@ except ImportError as e:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-try:
-    from kucoin.client import Market, Trade, User
-except ImportError as e:
-    logger.warning(f"KuCoin client import error: {type(e).__name__}")
-    Market, Trade, User = None, None, None
-
 class TradingBot:
     def __init__(self, api_key, api_secret, api_passphrase, api_url):
         self.api_key = api_key
@@ -93,6 +87,12 @@ class TradingBot:
             return {}, 0
 
         allocations = {symbol: 1 / len(symbols) for symbol in symbols}
+        
+        # Initialize profits for new symbols
+        for symbol in symbols:
+            if symbol not in self.profits:
+                self.profits[symbol] = 0
+        
         return allocations, tradable_usdt
 
     def get_account_balance(self, currency='USDT'):
@@ -310,7 +310,7 @@ class TradingBot:
                 logger.exception("Exception traceback:")
                 time.sleep(5)  # Wait for 5 seconds before the next iteration
 
-    def display_current_status(self, current_status):
+def display_current_status(self, current_status):
         logger.debug("Displaying current status")
         st.write("### Current Status")
         st.write(f"Current Time: {current_status['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
@@ -397,3 +397,75 @@ class TradingBot:
             status_df.set_index('timestamp', inplace=True)
             st.write("Total USDT Value Over Time")
             st.line_chart(status_df)
+
+    def start_trading(self, chosen_symbols, profit_margin):
+        logger.info("Starting trading")
+        while True:
+            try:
+                # Fetch current prices
+                prices = self.get_current_prices(chosen_symbols)
+                self.update_price_history(chosen_symbols, prices)
+
+                current_status = self.get_current_status(prices)
+                if current_status['tradable_usdt'] <= 0:
+                    logger.warning("No USDT available for trading")
+                    st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
+                    time.sleep(5)  # Wait for 5 seconds before checking again
+                    continue
+
+                for symbol in chosen_symbols:
+                    current_price = prices[symbol]
+                    if current_price is None:
+                        logger.warning(f"Skipping {symbol} due to unavailable price data")
+                        continue
+
+                    allocated_value = current_status['tradable_usdt'] * self.symbol_allocations[symbol]
+                    base_currency = symbol.split('-')[1]
+                    base_balance = self.get_account_balance(base_currency)
+
+                    # Check if we should buy
+                    if base_balance > 0 and self.should_buy(symbol, current_price):
+                        buy_amount_usdt = min(allocated_value, base_balance)
+                        if buy_amount_usdt > 0:
+                            order_amount = buy_amount_usdt / self.num_orders
+                            for _ in range(self.num_orders):
+                                order = self.place_market_buy_order(symbol, order_amount)
+                                if order:
+                                    target_sell_price = order['price'] * (1 + profit_margin + 2*self.FEE_RATE)
+                                    self.active_trades[order['orderId']] = {
+                                        'symbol': symbol,
+                                        'buy_price': order['price'],
+                                        'amount': order['amount'],
+                                        'target_sell_price': target_sell_price,
+                                        'fee_usdt': order['fee_usdt'],
+                                        'buy_time': datetime.now()
+                                    }
+                                    logger.info(f"Placed buy order for {symbol}: {order_amount:.4f} USDT at {order['price']:.4f}, Order ID: {order['orderId']}")
+
+                    # Check active trades for selling
+                    for order_id, trade in list(self.active_trades.items()):
+                        if trade['symbol'] == symbol and current_price >= trade['target_sell_price']:
+                            sell_amount_crypto = trade['amount']
+                            sell_order = self.place_market_sell_order(symbol, sell_amount_crypto)
+                            if sell_order:
+                                sell_amount_usdt = sell_order['amount']
+                                total_fee = trade['fee_usdt'] + sell_order['fee_usdt']
+                                profit = sell_amount_usdt - (trade['amount'] * trade['buy_price']) - total_fee
+                                self.profits[symbol] = self.profits.get(symbol, 0) + profit
+                                self.total_profit += profit
+                                logger.info(f"Placed sell order for {symbol}: {sell_amount_usdt:.4f} USDT at {sell_order['price']:.4f}, Profit: {profit:.4f} USDT, Total Fee: {total_fee:.4f} USDT, Order ID: {sell_order['orderId']}")
+                                del self.active_trades[order_id]
+
+                # Update allocations based on new total USDT value
+                self.update_allocations(current_status['current_total_usdt'], self.usdt_liquid_percentage)
+
+                # Display current status
+                self.display_current_status(current_status)
+
+                # Sleep for a short duration before the next iteration
+                time.sleep(1)
+
+            except Exception as e:
+                logger.error(f"An error occurred in the trading loop: {type(e).__name__}")
+                logger.exception("Exception traceback:")
+                time.sleep(5)  # Wait for 5 seconds before the next iteration
