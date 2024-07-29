@@ -35,14 +35,18 @@ def main():
     is_simulation, simulated_usdt_balance = config_result
 
     if not is_simulation:
-        user_api_key = st.sidebar.text_input("Enter your personal API key:", type="password")
-        if user_api_key != st.secrets["perso_key"]:
-            st.sidebar.warning("Invalid API key. Please enter the correct key to proceed.")
-            st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided.")
-            st.sidebar.button("Start Trading", disabled=True)
+        try:
+            user_api_key = st.sidebar.text_input("Enter your personal API key:", type="password")
+            if user_api_key != st.secrets.get("perso_key", ""):
+                st.sidebar.warning("Invalid API key. Please enter the correct key to proceed.")
+                st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided.")
+                st.sidebar.button("Start Trading", disabled=True)
+                return
+            else:
+                st.sidebar.success("API key verified. You can now start trading.")
+        except KeyError:
+            st.sidebar.error("Personal API key not found in Streamlit secrets. Please contact the app administrator.")
             return
-        else:
-            st.sidebar.success("API key verified. You can now start trading.")
 
         api_key = st.secrets["api_credentials"]["api_key"]
         api_secret = st.secrets["api_credentials"]["api_secret"]
@@ -104,7 +108,7 @@ def main():
 
     initialize_session_state()
 
-    if not is_simulation and user_api_key != st.secrets["perso_key"]:
+    if not is_simulation and user_api_key != st.secrets.get("perso_key", ""):
         st.sidebar.warning("Invalid API key. Please enter the correct key to proceed.")
         st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided.")
         st.sidebar.button("Start Trading", disabled=True)
