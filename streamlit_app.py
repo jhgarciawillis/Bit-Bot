@@ -26,7 +26,7 @@ def get_available_trading_symbols(market_client):
 
 def main():
     st.set_page_config(layout="wide")
-    st.title("Cryptocurrency Trading Bot")
+    st.sidebar.title("Cryptocurrency Trading Bot")  # Move the title to the sidebar
 
     sidebar_config = SidebarConfig()
     config_result = sidebar_config.configure()
