@@ -42,12 +42,16 @@ def main():
     # Get user inputs
     if bot.trading_client.market_client is not None:
         try:
-            available_trading_symbols = bot.trading_client.market_client.get_symbol_list()
+            symbol_list = bot.trading_client.market_client.get_symbol_list()
+            available_trading_symbols = [item['symbol'] for item in symbol_list if isinstance(item, dict) and 'symbol' in item]
         except Exception as e:
             st.error(f"Error fetching symbol list: {e}")
             available_trading_symbols = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
     else:
         available_trading_symbols = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
+
+    # Filter out non-USDT trading pairs
+    available_trading_symbols = [symbol for symbol in available_trading_symbols if symbol.endswith('-USDT')]
     
     user_selected_symbols = st.sidebar.multiselect("Select Symbols to Trade", available_trading_symbols)
 
