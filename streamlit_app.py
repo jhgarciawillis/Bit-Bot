@@ -28,18 +28,16 @@ def main():
     api_url = "https://api.kucoin.com"
 
     bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
+    bot.is_simulation = is_simulation
     if is_simulation:
-        bot.is_simulation = True
-        bot.simulated_usdt_balance = {'USDT': simulated_usdt_balance}
+        bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
 
     if 'bot' not in st.session_state:
         st.session_state.bot = bot
 
-    if not is_simulation:
-        total_usdt = bot.get_account_balance('USDT')
-        st.sidebar.write(f"Confirmed USDT Balance: {total_usdt:.2f}")
-    else:
-        total_usdt = bot.simulated_usdt_balance['USDT']
+    bot.initialize()
+    total_usdt = bot.get_account_balance('USDT')
+    st.sidebar.write(f"Confirmed USDT Balance: {total_usdt:.4f}")
 
     # Get user inputs
     if bot.trading_client.market_client is not None:
