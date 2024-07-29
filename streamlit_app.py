@@ -30,10 +30,8 @@ def main():
 
     sidebar_config = SidebarConfig()
     config_result = sidebar_config.configure()
-    
     if config_result is None:
         return
-    
     is_simulation, simulated_usdt_balance = config_result
 
     api_key = st.secrets["api_credentials"]["api_key"]
@@ -45,7 +43,6 @@ def main():
 
     bot = st.session_state.bot
     bot.is_simulation = is_simulation
-
     if is_simulation:
         bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
     
@@ -55,7 +52,6 @@ def main():
 
     available_trading_symbols = get_available_trading_symbols(bot.trading_client.market_client) if bot.trading_client.market_client else DEFAULT_TRADING_SYMBOLS
     user_selected_symbols = st.sidebar.multiselect("Select Symbols to Trade", available_trading_symbols)
-
     if not user_selected_symbols:
         st.warning("Please select at least one symbol to trade.")
         return
@@ -85,9 +81,8 @@ def main():
     num_orders_per_trade = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
 
     # Create containers for charts and table
-    chart_container = st.container()
-    table_container = st.container()
-
+    chart_container = st.empty()
+    table_container = st.empty()
     trade_messages = st.empty()
     error_placeholder = st.empty()
 
@@ -102,10 +97,10 @@ def main():
 
         while True:
             try:
-                with chart_container:
+                with chart_container.container():
                     st.plotly_chart(charts, use_container_width=True)
 
-                with table_container:
+                with table_container.container():
                     current_prices = bot.trading_client.get_current_prices(user_selected_symbols)
                     current_status = bot.get_current_status(current_prices)
                     StatusTable(table_container, bot, user_selected_symbols).display(current_status)
