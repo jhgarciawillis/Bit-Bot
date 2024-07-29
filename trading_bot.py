@@ -181,6 +181,11 @@ class TradingBot:
             logger.warning("No USDT available for trading")
             return {}, 0
 
+        # Check if symbols is a list and not empty
+        if not isinstance(symbols, list) or len(symbols) == 0:
+            logger.warning("No symbols provided for allocation")
+            return {}, tradable_usdt
+
         allocations = {symbol: 1 / len(symbols) for symbol in symbols}
         
         # Initialize profits for new symbols
