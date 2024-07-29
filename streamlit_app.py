@@ -34,6 +34,13 @@ def main():
         return
     is_simulation, simulated_usdt_balance = config_result
 
+    chart_container = st.empty()
+    table_container = st.empty()
+    trade_messages = st.empty()
+    error_placeholder = st.empty()
+
+    initialize_session_state()
+
     if not is_simulation:
         try:
             user_api_key = st.sidebar.text_input("Enter your personal API key:", type="password")
@@ -44,68 +51,64 @@ def main():
                 return
             else:
                 st.sidebar.success("API key verified. You can now start trading.")
+
+            api_key = st.secrets["api_credentials"]["api_key"]
+            api_secret = st.secrets["api_credentials"]["api_secret"]
+            api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
         except KeyError:
             st.sidebar.error("Personal API key not found in Streamlit secrets. Please contact the app administrator.")
             return
     else:
         user_api_key = None
-
-    chart_container = st.empty()
-    table_container = st.empty()
-    trade_messages = st.empty()
-    error_placeholder = st.empty()
-
-    initialize_session_state()
-
-    if user_api_key == st.secrets.get("perso_key", ""):
         api_key = st.secrets["api_credentials"]["api_key"]
         api_secret = st.secrets["api_credentials"]["api_secret"]
         api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
 
-        if 'bot' not in st.session_state:
-            st.session_state.bot = TradingBot(api_key, api_secret, api_passphrase, API_URL)
+    if 'bot' not in st.session_state:
+        st.session_state.bot = TradingBot(api_key, api_secret, api_passphrase, API_URL)
 
-        bot = st.session_state.bot
-        bot.is_simulation = is_simulation
+    bot = st.session_state.bot
+    bot.is_simulation = is_simulation
 
-        if is_simulation:
-            bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
-        else:
-            bot.initialize()
-        
-        total_usdt_balance = bot.get_account_balance('USDT')
-        st.sidebar.write(f"{'Simulated' if is_simulation else 'Confirmed'} USDT Balance: {total_usdt_balance:.4f}")
+    if is_simulation:
+        bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
+    else:
+        bot.initialize()
+    
+    total_usdt_balance = bot.get_account_balance('USDT')
+    st.sidebar.write(f"{'Simulated' if is_simulation else 'Confirmed'} USDT Balance: {total_usdt_balance:.4f}")
 
-        available_trading_symbols = get_available_trading_symbols(bot.trading_client.market_client) if bot.trading_client.market_client else DEFAULT_TRADING_SYMBOLS
-        user_selected_symbols = st.sidebar.multiselect("Select Symbols to Trade", available_trading_symbols)
-        if not user_selected_symbols:
-            st.warning("Please select at least one symbol to trade.")
-            return
-        
-        bot.usdt_liquid_percentage = st.sidebar.number_input(
-            "Enter the percentage of your assets to keep liquid in USDT (0-100%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=50.0,
-            step=0.0001,
-            format="%.4f"
-        ) / 100
+    available_trading_symbols = get_available_trading_symbols(bot.trading_client.market_client) if bot.trading_client.market_client else DEFAULT_TRADING_SYMBOLS
+    user_selected_symbols = st.sidebar.multiselect("Select Symbols to Trade", available_trading_symbols)
+    if not user_selected_symbols:
+        st.warning("Please select at least one symbol to trade.")
+        return
+    
+    bot.usdt_liquid_percentage = st.sidebar.number_input(
+        "Enter the percentage of your assets to keep liquid in USDT (0-100%)",
+        min_value=0.0,
+        max_value=100.0,
+        value=50.0,
+        step=0.0001,
+        format="%.4f"
+    ) / 100
 
-        bot.symbol_allocations, tradable_usdt_amount = bot.get_user_allocations(user_selected_symbols, total_usdt_balance)
-        if tradable_usdt_amount <= 0:
-            st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
-            return
+    bot.symbol_allocations, tradable_usdt_amount = bot.get_user_allocations(user_selected_symbols, total_usdt_balance)
+    if tradable_usdt_amount <= 0:
+        st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
+        return
 
-        profit_margin_percentage = st.sidebar.number_input(
-            "Profit Margin Percentage (0-100%)",
-            min_value=0.0001,
-            max_value=100.0,
-            value=1.0,
-            step=0.0001,
-            format="%.4f"
-        ) / 100
-        num_orders_per_trade = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
+    profit_margin_percentage = st.sidebar.number_input(
+        "Profit Margin Percentage (0-100%)",
+        min_value=0.0001,
+        max_value=100.0,
+        value=1.0,
+        step=0.0001,
+        format="%.4f"
+    ) / 100
+    num_orders_per_trade = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
 
+    if user_api_key == st.secrets.get("perso_key", "") or is_simulation:
         if st.sidebar.button("Start Trading"):
             trading_thread = threading.Thread(target=trading_loop, args=(bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade))
             trading_thread.start()
