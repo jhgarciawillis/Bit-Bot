@@ -45,6 +45,7 @@ def main():
         api_key = st.secrets["api_credentials"]["api_key"]
         api_secret = st.secrets["api_credentials"]["api_secret"]
         api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
+        total_usdt_balance = simulated_usdt_balance
     else:
         user_api_key = st.sidebar.text_input("Enter your personal API key:", type="password")
         if user_api_key != st.secrets.get("perso_key", ""):
@@ -52,11 +53,15 @@ def main():
             st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided.")
             st.sidebar.button("Start Trading", disabled=True)
             api_key, api_secret, api_passphrase = None, None, None
+            total_usdt_balance = 0.0
         else:
             st.sidebar.success("API key verified. You can now start trading.")
             api_key = st.secrets["api_credentials"]["api_key"]
             api_secret = st.secrets["api_credentials"]["api_secret"]
             api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
+            bot = TradingBot(api_key, api_secret, api_passphrase, API_URL)
+            bot.initialize()
+            total_usdt_balance = bot.get_account_balance('USDT')
 
     if 'bot' not in st.session_state:
         st.session_state.bot = TradingBot(api_key, api_secret, api_passphrase, API_URL)
@@ -64,13 +69,6 @@ def main():
     bot = st.session_state.bot
     bot.is_simulation = is_simulation
 
-    if is_simulation:
-        bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
-    elif api_key and api_secret and api_passphrase:
-        bot.initialize()
-    else:
-        total_usdt_balance = 0.0
-    
     st.sidebar.write(f"{'Simulated' if is_simulation else 'Confirmed'} USDT Balance: {total_usdt_balance:.4f}")
 
     available_trading_symbols = get_available_trading_symbols(bot.trading_client.market_client) if bot.trading_client.market_client else DEFAULT_TRADING_SYMBOLS
@@ -135,8 +133,6 @@ def main():
         st.sidebar.warning("Invalid API key or checkbox not checked. Please enter the correct API key and check the checkbox to proceed.")
         st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided and the checkbox is checked.")
         st.sidebar.button("Start Trading", disabled=True)
-        total_usdt_balance = 0.0
-        st.sidebar.write(f"{'Simulated' if is_simulation else 'Confirmed'} USDT Balance: {total_usdt_balance:.4f}")
 
     ErrorMessage(error_placeholder).display()  # Display error message outside the loop
 
