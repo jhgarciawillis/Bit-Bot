@@ -95,8 +95,8 @@ class StatusTable:
 
     def format_current_pl(self, prices, active_trades, symbol):
         current_price = prices[symbol]
-        buy_order = next((trade for trade in active_trades.values() if trade['symbol'] == symbol), current_price)
-        if current_price is not None and buy_order:
+        buy_order = next((trade for trade in active_trades.values() if trade['symbol'] == symbol), None)
+        if current_price is not None and buy_order and buy_order['buy_price'] != 0:
             return f"{(current_price - buy_order['buy_price']) / buy_order['buy_price'] * 100:.2f}%"
         else:
             return 'N/A'
