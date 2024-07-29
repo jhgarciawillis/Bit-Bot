@@ -120,7 +120,7 @@ class TradingBot:
         self.active_trades = {}
         self.PRICE_HISTORY_LENGTH = 30
         self.is_simulation = False
-        self.simulated_usdt_balance = 0
+        self.simulated_usdt_balance = {}
         self.num_orders = 1
         self.FEE_RATE = 0.001
         self.status_history = []
@@ -142,11 +142,13 @@ class TradingBot:
                 logger.error(f"Error fetching account balance for {currency}: {type(e).__name__}")
                 return 0
         else:
-            return self.simulated_usdt_balance
+            if 'USDT' not in self.simulated_usdt_balance:
+                self.simulated_usdt_balance['USDT'] = 0
+            return self.simulated_usdt_balance['USDT']
 
     def print_total_usdt_balance(self):
         if self.is_simulation:
-            total_usdt = self.simulated_usdt_balance
+            total_usdt = self.simulated_usdt_balance['USDT']
         else:
             total_usdt = self.get_account_balance('USDT')
         st.sidebar.write(f"Total USDT Balance: {total_usdt:.4f}")
@@ -252,27 +254,25 @@ class TradingBot:
 
     def place_market_buy_order(self, symbol, amount_usdt):
         if self.is_simulation:
-            return self.trading_client.place_market_order(symbol, amount_usdt, 'buy')
+            order = self.trading_client.place_market_order(symbol, amount_usdt, 'buy')
+            if order:
+                self.simulated_usdt_balance['USDT'] -= order['amount']
+                if symbol not in self.simulated_usdt_balance:
+                    self.simulated_usdt_balance[symbol] = 0
+                self.simulated_usdt_balance[symbol] += order['amount']
+            return order
         else:
-            try:
-                order = self.trading_client.trade_client.create_market_order(symbol, 'buy', funds=amount_usdt)
-                logger.info(f"Placed buy order for {symbol}: {amount_usdt:.4f} USDT, Order ID: {order['orderId']}")
-                return order
-            except Exception as e:
-                logger.error(f"Error placing buy order for {symbol}: {type(e).__name__}")
-                return None
+            return self.trading_client.place_market_order(symbol, amount_usdt, 'buy')
 
     def place_market_sell_order(self, symbol, amount_crypto):
         if self.is_simulation:
-            return self.trading_client.place_market_order(symbol, amount_crypto, 'sell')
+            order = self.trading_client.place_market_order(symbol, amount_crypto, 'sell')
+            if order:
+                self.simulated_usdt_balance['USDT'] += order['amount_usdt']
+                self.simulated_usdt_balance[symbol] -= amount_crypto
+            return order
         else:
-            try:
-                order = self.trading_client.trade_client.create_market_order(symbol, 'sell', size=amount_crypto)
-                logger.info(f"Placed sell order for {symbol}: {amount_crypto:.8f}, Order ID: {order['orderId']}")
-                return order
-            except Exception as e:
-                logger.error(f"Error placing sell order for {symbol}: {type(e).__name__}")
-                return None
+            return self.trading_client.place_market_order(symbol, amount_crypto, 'sell')
 
     def display_current_status(self, current_status):
         logger.debug("Displaying current status")
