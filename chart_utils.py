@@ -2,7 +2,7 @@ import plotly.graph_objects as go
 import pandas as pd
 from trading_bot import TradingBot
 
-def create_time_series_chart(bot, chosen_symbols, chart_type):
+def create_time_series_chart(bot: TradingBot, chosen_symbols, chart_type):
     fig = go.Figure()
     
     for symbol in chosen_symbols:
