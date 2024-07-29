@@ -1,5 +1,3 @@
-import streamlit as st
-import pandas as pd
 from trading_bot import TradingBot
 
 def configure_sidebar():
@@ -27,6 +25,9 @@ def configure_sidebar():
         api_secret = st.secrets["api_credentials"]["api_secret"]
         api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
         api_url = "https://api.kucoin.com"
+
+    bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
+    bot.print_total_usdt_balance()
 
     return api_key, api_secret, api_passphrase, api_url, is_simulation
 
