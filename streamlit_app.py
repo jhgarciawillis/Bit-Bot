@@ -68,8 +68,9 @@ def main():
         bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
     elif api_key and api_secret and api_passphrase:
         bot.initialize()
+    else:
+        total_usdt_balance = 0.0
     
-    total_usdt_balance = bot.get_account_balance('USDT')
     st.sidebar.write(f"{'Simulated' if is_simulation else 'Confirmed'} USDT Balance: {total_usdt_balance:.4f}")
 
     available_trading_symbols = get_available_trading_symbols(bot.trading_client.market_client) if bot.trading_client.market_client else DEFAULT_TRADING_SYMBOLS
@@ -134,6 +135,8 @@ def main():
         st.sidebar.warning("Invalid API key or checkbox not checked. Please enter the correct API key and check the checkbox to proceed.")
         st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided and the checkbox is checked.")
         st.sidebar.button("Start Trading", disabled=True)
+        total_usdt_balance = 0.0
+        st.sidebar.write(f"{'Simulated' if is_simulation else 'Confirmed'} USDT Balance: {total_usdt_balance:.4f}")
 
     ErrorMessage(error_placeholder).display()  # Display error message outside the loop
 
