@@ -50,6 +50,13 @@ def main():
     else:
         user_api_key = None
 
+    chart_container = st.empty()
+    table_container = st.empty()
+    trade_messages = st.empty()
+    error_placeholder = st.empty()
+
+    initialize_session_state()
+
     if user_api_key == st.secrets.get("perso_key", ""):
         api_key = st.secrets["api_credentials"]["api_key"]
         api_secret = st.secrets["api_credentials"]["api_secret"]
@@ -99,44 +106,35 @@ def main():
         ) / 100
         num_orders_per_trade = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
 
-        # Create containers for charts and table
-        chart_container = st.empty()
-        table_container = st.empty()
-        trade_messages = st.empty()
-        error_placeholder = st.empty()
+        if st.sidebar.button("Start Trading"):
+            trading_thread = threading.Thread(target=trading_loop, args=(bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade))
+            trading_thread.start()
 
-        initialize_session_state()
+            chart_creator = ChartCreator(bot)
+            charts = chart_creator.create_charts()
 
-        if user_api_key == st.secrets.get("perso_key", ""):
-            if st.sidebar.button("Start Trading"):
-                trading_thread = threading.Thread(target=trading_loop, args=(bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade))
-                trading_thread.start()
+            while True:
+                try:
+                    # Display the updated charts
+                    with chart_container.container():
+                        st.plotly_chart(charts, use_container_width=True)
 
-                chart_creator = ChartCreator(bot)
-                charts = chart_creator.create_charts()
+                    # Display the updated table
+                    with table_container.container():
+                        current_prices = bot.trading_client.get_current_prices(user_selected_symbols)
+                        current_status = bot.get_current_status(current_prices)
+                        StatusTable(table_container, bot, user_selected_symbols).display(current_status)
 
-                while True:
-                    try:
-                        # Display the updated charts
-                        with chart_container.container():
-                            st.plotly_chart(charts, use_container_width=True)
+                    TradeMessages(trade_messages).display()
 
-                        # Display the updated table
-                        with table_container.container():
-                            current_prices = bot.trading_client.get_current_prices(user_selected_symbols)
-                            current_status = bot.get_current_status(current_prices)
-                            StatusTable(table_container, bot, user_selected_symbols).display(current_status)
-
-                        TradeMessages(trade_messages).display()
-
-                        time.sleep(1)
-                    except Exception as e:
-                        st.error(f"An error occurred in the main loop: {e}")
-                        time.sleep(5)
-        else:
-            st.sidebar.warning("Invalid API key. Please enter the correct key to proceed.")
-            st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided.")
-            st.sidebar.button("Start Trading", disabled=True)
+                    time.sleep(1)
+                except Exception as e:
+                    st.error(f"An error occurred in the main loop: {e}")
+                    time.sleep(5)
+    else:
+        st.sidebar.warning("Invalid API key. Please enter the correct key to proceed.")
+        st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided.")
+        st.sidebar.button("Start Trading", disabled=True)
 
     ErrorMessage(error_placeholder).display()  # Display error message outside the loop
 
