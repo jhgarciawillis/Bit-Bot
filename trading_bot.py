@@ -19,7 +19,7 @@ except ImportError as e:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class TradingBot:
+class TradingClient:
     def __init__(self, api_key, api_secret, api_passphrase, api_url):
         self.api_key = api_key
         self.api_secret = api_secret
@@ -28,23 +28,10 @@ class TradingBot:
         self.market_client = None
         self.trade_client = None
         self.user_client = None
-        self.wallet = Wallet()
-        self.wallet.add_account("trading")
-        self.profits = {}
-        self.total_profit = 0
-        self.symbol_allocations = {}
-        self.usdt_liquid_percentage = 0
-        self.price_history = {}
-        self.active_trades = {}
-        self.PRICE_HISTORY_LENGTH = 30
-        self.is_simulation = False
-        self.num_orders = 1
-        self.FEE_RATE = 0.001
-        self.status_history = []
 
-    def initialize_clients(self):
+    def initialize(self):
         logger.info("Initializing clients")
-        if not self.is_simulation and Market and Trade and User:
+        if Market and Trade and User:
             try:
                 self.market_client = Market(url=self.api_url)
                 self.trade_client = Trade(key=self.api_key, secret=self.api_secret, passphrase=self.api_passphrase, url=self.api_url)
@@ -58,6 +45,89 @@ class TradingBot:
         else:
             logger.warning("Running in simulation mode or KuCoin client not available.")
 
+    def get_current_prices(self, symbols):
+        prices = {}
+        for symbol in symbols:
+            try:
+                if self.market_client:
+                    ticker = self.market_client.get_ticker(symbol)
+                    prices[symbol] = float(ticker['price'])
+                else:
+                    # Fallback to REST API if market_client is not available
+                    response = requests.get(f"{self.api_url}/api/v1/market/orderbook/level1?symbol={symbol}")
+                    response.raise_for_status()
+                    prices[symbol] = float(response.json()['data']['price'])
+            except Exception as e:
+                logger.error(f"Error fetching price for {symbol}: {type(e).__name__}")
+                prices[symbol] = None
+        
+        logger.info(f"Current prices: {prices}")
+        return prices
+
+    def place_market_order(self, symbol, amount, order_type):
+        logger.debug(f"Placing {order_type} order for {symbol}")
+        current_price = self.get_current_prices([symbol])[symbol]
+        if current_price is None:
+            logger.error(f"Unable to place {order_type} order for {symbol} due to price fetch error")
+            st.error(f"Unable to place {order_type} order for {symbol} due to price fetch error")
+            return None
+
+        if order_type == 'buy':
+            amount_usdt_with_fee = amount / (1 + TradingBot.FEE_RATE)
+            amount_crypto = amount_usdt_with_fee / current_price
+            fee_usdt = amount - amount_usdt_with_fee
+        else:  # sell
+            amount_usdt = amount * current_price
+            fee_usdt = amount_usdt * TradingBot.FEE_RATE
+            amount_usdt_after_fee = amount_usdt - fee_usdt
+
+        if TradingBot.is_simulation:
+            order_id = f"sim_{order_type}_{symbol}_{time.time()}"
+        else:
+            try:
+                if order_type == 'buy':
+                    order = self.trade_client.create_market_order(symbol, 'buy', funds=amount)
+                else:
+                    order = self.trade_client.create_market_order(symbol, 'sell', size=amount)
+                order_id = order['orderId']
+                order_details = self.trade_client.get_order_details(order_id)
+                current_price = float(order_details['dealFunds']) / float(order_details['dealSize'])
+                amount_crypto = float(order_details['dealSize'])
+                fee_usdt = float(order_details['fee'])
+            except Exception as e:
+                logger.error(f"Error placing {order_type} order for {symbol}: {type(e).__name__}")
+                st.error(f"Error placing {order_type} order for {symbol}: {type(e).__name__}")
+                return None
+
+        logger.info(f"Successfully placed {order_type} order for {symbol}")
+        return {
+            'orderId': order_id,
+            'price': current_price,
+            'amount': amount_crypto if order_type == 'buy' else amount_usdt_after_fee,
+            'fee_usdt': fee_usdt
+        }
+
+class TradingBot:
+    def __init__(self, api_key, api_secret, api_passphrase, api_url):
+        self.trading_client = TradingClient(api_key, api_secret, api_passphrase, api_url)
+        self.wallet = Wallet()
+        self.wallet.add_account("trading")
+        self.profits = {}
+        self.total_profit = 0
+        self.symbol_allocations = {}
+        self.usdt_liquid_percentage = 0
+        self.price_history = {}
+        self.active_trades = {}
+        self.PRICE_HISTORY_LENGTH = 30
+        self.is_simulation = False
+        self.simulated_usdt_balance = 0
+        self.num_orders = 1
+        self.FEE_RATE = 0.001
+        self.status_history = []
+
+    def initialize(self):
+        self.trading_client.initialize()
+
     def get_user_symbol_choices(self, available_symbols):
         logger.debug("Getting user symbol choices")
         return st.sidebar.multiselect("Select Symbols to Trade", available_symbols)
@@ -66,7 +136,7 @@ class TradingBot:
         logger.debug(f"Getting account balance for {currency}")
         if not self.is_simulation:
             try:
-                account_balance = self.user_client.get_account(currency, account_type='trade')
+                account_balance = self.trading_client.user_client.get_account(currency, account_type='trade')
                 return float(account_balance['available'])
             except Exception as e:
                 logger.error(f"Error fetching account balance for {currency}: {type(e).__name__}")
@@ -113,97 +183,6 @@ class TradingBot:
                 self.profits[symbol] = 0
         
         return allocations, tradable_usdt
-
-    def get_current_prices(self, symbols):
-        prices = {}
-        for symbol in symbols:
-            try:
-                if self.market_client:
-                    ticker = self.market_client.get_ticker(symbol)
-                    prices[symbol] = float(ticker['price'])
-                else:
-                    # Fallback to REST API if market_client is not available
-                    response = requests.get(f"{self.api_url}/api/v1/market/orderbook/level1?symbol={symbol}")
-                    response.raise_for_status()
-                    prices[symbol] = float(response.json()['data']['price'])
-            except Exception as e:
-                logger.error(f"Error fetching price for {symbol}: {type(e).__name__}")
-                prices[symbol] = None
-        
-        logger.info(f"Current prices: {prices}")
-        return prices
-
-    def place_market_order(self, symbol, amount, order_type):
-        logger.debug(f"Placing {order_type} order for {symbol}")
-        current_price = self.get_current_prices([symbol])[symbol]
-        if current_price is None:
-            logger.error(f"Unable to place {order_type} order for {symbol} due to price fetch error")
-            st.error(f"Unable to place {order_type} order for {symbol} due to price fetch error")
-            return None
-
-        if order_type == 'buy':
-            amount_usdt_with_fee = amount / (1 + self.FEE_RATE)
-            amount_crypto = amount_usdt_with_fee / current_price
-            fee_usdt = amount - amount_usdt_with_fee
-        else:  # sell
-            amount_usdt = amount * current_price
-            fee_usdt = amount_usdt * self.FEE_RATE
-            amount_usdt_after_fee = amount_usdt - fee_usdt
-
-        if self.is_simulation:
-            success = getattr(self.wallet, f"simulate_market_{order_type}")("trading", symbol.split('-')[0], amount if order_type == 'sell' else amount_usdt_with_fee, current_price)
-            if not success:
-                logger.error(f"Insufficient funds to place {order_type} order for {symbol}")
-                st.error(f"Insufficient funds to place {order_type} order for {symbol}")
-                return None
-            order_id = f"sim_{order_type}_{symbol}_{time.time()}"
-        else:
-            try:
-                if order_type == 'buy':
-                    order = self.trade_client.create_market_order(symbol, 'buy', funds=amount)
-                else:
-                    order = self.trade_client.create_market_order(symbol, 'sell', size=amount)
-                order_id = order['orderId']
-                order_details = self.trade_client.get_order_details(order_id)
-                current_price = float(order_details['dealFunds']) / float(order_details['dealSize'])
-                amount_crypto = float(order_details['dealSize'])
-                fee_usdt = float(order_details['fee'])
-            except Exception as e:
-                logger.error(f"Error placing {order_type} order for {symbol}: {type(e).__name__}")
-                st.error(f"Error placing {order_type} order for {symbol}: {type(e).__name__}")
-                return None
-
-        logger.info(f"Successfully placed {order_type} order for {symbol}")
-        return {
-            'orderId': order_id,
-            'price': current_price,
-            'amount': amount_crypto if order_type == 'buy' else amount_usdt_after_fee,
-            'fee_usdt': fee_usdt
-        }
-
-    def place_market_buy_order(self, symbol, amount_usdt):
-        if self.is_simulation:
-            return self.place_market_order(symbol, amount_usdt, 'buy')
-        else:
-            try:
-                order = self.trade_client.create_market_order(symbol, 'buy', funds=amount_usdt)
-                logger.info(f"Placed buy order for {symbol}: {amount_usdt:.4f} USDT, Order ID: {order['orderId']}")
-                return order
-            except Exception as e:
-                logger.error(f"Error placing buy order for {symbol}: {type(e).__name__}")
-                return None
-
-    def place_market_sell_order(self, symbol, amount_crypto):
-        if self.is_simulation:
-            return self.place_market_order(symbol, amount_crypto, 'sell')
-        else:
-            try:
-                order = self.trade_client.create_market_order(symbol, 'sell', size=amount_crypto)
-                logger.info(f"Placed sell order for {symbol}: {amount_crypto:.8f}, Order ID: {order['orderId']}")
-                return order
-            except Exception as e:
-                logger.error(f"Error placing sell order for {symbol}: {type(e).__name__}")
-                return None
 
     def update_price_history(self, symbols, prices):
         logger.debug("Updating price history")
@@ -270,6 +249,30 @@ class TradingBot:
         
         self.status_history.append(status)
         return status
+
+    def place_market_buy_order(self, symbol, amount_usdt):
+        if self.is_simulation:
+            return self.trading_client.place_market_order(symbol, amount_usdt, 'buy')
+        else:
+            try:
+                order = self.trading_client.trade_client.create_market_order(symbol, 'buy', funds=amount_usdt)
+                logger.info(f"Placed buy order for {symbol}: {amount_usdt:.4f} USDT, Order ID: {order['orderId']}")
+                return order
+            except Exception as e:
+                logger.error(f"Error placing buy order for {symbol}: {type(e).__name__}")
+                return None
+
+    def place_market_sell_order(self, symbol, amount_crypto):
+        if self.is_simulation:
+            return self.trading_client.place_market_order(symbol, amount_crypto, 'sell')
+        else:
+            try:
+                order = self.trading_client.trade_client.create_market_order(symbol, 'sell', size=amount_crypto)
+                logger.info(f"Placed sell order for {symbol}: {amount_crypto:.8f}, Order ID: {order['orderId']}")
+                return order
+            except Exception as e:
+                logger.error(f"Error placing sell order for {symbol}: {type(e).__name__}")
+                return None
 
     def display_current_status(self, current_status):
         logger.debug("Displaying current status")
