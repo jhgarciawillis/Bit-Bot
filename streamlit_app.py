@@ -41,7 +41,11 @@ def main():
 
     initialize_session_state()
 
-    if not is_simulation:
+    if is_simulation:
+        api_key = st.secrets["api_credentials"]["api_key"]
+        api_secret = st.secrets["api_credentials"]["api_secret"]
+        api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
+    else:
         try:
             user_api_key = st.sidebar.text_input("Enter your personal API key:", type="password")
             if user_api_key != st.secrets.get("perso_key", ""):
@@ -58,11 +62,6 @@ def main():
         except KeyError:
             st.sidebar.error("Personal API key not found in Streamlit secrets. Please contact the app administrator.")
             return
-    else:
-        user_api_key = None
-        api_key = st.secrets["api_credentials"]["api_key"]
-        api_secret = st.secrets["api_credentials"]["api_secret"]
-        api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
 
     if 'bot' not in st.session_state:
         st.session_state.bot = TradingBot(api_key, api_secret, api_passphrase, API_URL)
@@ -108,7 +107,9 @@ def main():
     ) / 100
     num_orders_per_trade = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
 
-    if user_api_key == st.secrets.get("perso_key", "") or is_simulation:
+    understand_checkbox = st.sidebar.checkbox("I understand the risks and want to proceed")
+
+    if user_api_key == st.secrets.get("perso_key", "") and understand_checkbox:
         if st.sidebar.button("Start Trading"):
             trading_thread = threading.Thread(target=trading_loop, args=(bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade))
             trading_thread.start()
@@ -135,8 +136,8 @@ def main():
                     st.error(f"An error occurred in the main loop: {e}")
                     time.sleep(5)
     else:
-        st.sidebar.warning("Invalid API key. Please enter the correct key to proceed.")
-        st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided.")
+        st.sidebar.warning("Invalid API key or checkbox not checked. Please enter the correct API key and check the checkbox to proceed.")
+        st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided and the checkbox is checked.")
         st.sidebar.button("Start Trading", disabled=True)
 
     ErrorMessage(error_placeholder).display()  # Display error message outside the loop
