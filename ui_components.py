@@ -1,73 +1,140 @@
-import pandas as pd
 import streamlit as st
 from trading_bot import TradingBot
 
-def configure_sidebar():
-    st.sidebar.header("Configuration")
+class SidebarConfig:
+    def __init__(self, bot: TradingBot):
+        self.bot = bot
 
-    # Simulation mode toggle
-    is_simulation = st.sidebar.checkbox("Simulation Mode", value=True)
+    def configure(self):
+        st.sidebar.header("Configuration")
 
-    if is_simulation:
+        # Simulation mode toggle
+        self.is_simulation = st.sidebar.checkbox("Simulation Mode", value=True)
+
+        if self.is_simulation:
+            self.configure_simulation_mode()
+        else:
+            self.configure_live_mode()
+
+        self.bot.print_total_usdt_balance()
+
+        return (
+            self.api_key,
+            self.api_secret,
+            self.api_passphrase,
+            self.api_url,
+            self.is_simulation,
+        )
+
+    def configure_simulation_mode(self):
         st.sidebar.write("Running in simulation mode. No real trades will be executed.")
-        api_key = "simulation"
-        api_secret = "simulation"
-        api_passphrase = "simulation"
-        api_url = "https://api.kucoin.com"  # You can use the real URL even for simulation
-        simulated_usdt_balance = st.sidebar.number_input("Simulated USDT Balance", min_value=0.0, value=1000.0, step=0.1)
-    else:
+        self.api_key = "simulation"
+        self.api_secret = "simulation"
+        self.api_passphrase = "simulation"
+        self.api_url = "https://api.kucoin.com"  # You can use the real URL even for simulation
+        self.simulated_usdt_balance = st.sidebar.number_input(
+            f"Simulated USDT Balance",
+            key=f"simulated_usdt_balance_{id(self.bot)}",
+            min_value=0.0,
+            value=1000.0,
+            step=0.1
+        )
+        self.bot.simulated_usdt_balance = self.simulated_usdt_balance
+
+    def configure_live_mode(self):
         st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
         st.sidebar.warning("Only proceed if you understand the risks and are using funds you can afford to lose.")
         proceed = st.sidebar.checkbox("I understand the risks and want to proceed")
         if not proceed:
             st.sidebar.error("Please check the box to proceed with live trading.")
-            return None, None, None, None, None, None
+            self.api_key = None
+            self.api_secret = None
+            self.api_passphrase = None
+            self.api_url = None
+        else:
+            # Use secrets for API credentials in live mode
+            self.api_key = st.secrets["api_credentials"]["api_key"]
+            self.api_secret = st.secrets["api_credentials"]["api_secret"]
+            self.api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
+            self.api_url = "https://api.kucoin.com"
 
-        # Use secrets for API credentials in live mode
-        api_key = st.secrets["api_credentials"]["api_key"]
-        api_secret = st.secrets["api_credentials"]["api_secret"]
-        api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
-        api_url = "https://api.kucoin.com"
+class StatusTable:
+    def __init__(self, status_table, bot: TradingBot, chosen_symbols):
+        self.status_table = status_table
+        self.bot = bot
+        self.chosen_symbols = chosen_symbols
 
-    bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
-    if is_simulation:
-        bot.simulated_usdt_balance = simulated_usdt_balance
-    bot.print_total_usdt_balance()
+    def display(self, current_status):
+        status_df = self.create_status_dataframe(current_status)
+        self.status_table.table(status_df)
 
-    return api_key, api_secret, api_passphrase, api_url, is_simulation, bot
+    def create_status_dataframe(self, current_status):
+        status_df = self.create_symbol_status_dataframe(current_status)
+        status_df = self.add_summary_rows(status_df, current_status)
+        return status_df
 
-def initialize_session_state():
-    if 'trade_messages' not in st.session_state:
-        st.session_state.trade_messages = []
-    if 'error_message' not in st.session_state:
-        st.session_state.error_message = ""
+    def create_symbol_status_dataframe(self, current_status):
+        data = {
+            'Symbol': self.chosen_symbols,
+            'Current Price': [self.format_price(current_status['prices'][symbol]) for symbol in self.chosen_symbols],
+            'Buy Price': [self.format_buy_price(current_status['active_trades'], symbol) for symbol in self.chosen_symbols],
+            'Target Sell Price': [self.format_target_sell_price(current_status['active_trades'], symbol) for symbol in self.chosen_symbols],
+            'Current P/L': [self.format_current_pl(current_status['prices'], current_status['active_trades'], symbol) for symbol in self.chosen_symbols],
+            'Active Trade': [self.format_active_trade(current_status['active_trades'], symbol) for symbol in self.chosen_symbols],
+            'Realized Profit': [self.format_realized_profit(current_status['profits'], symbol) for symbol in self.chosen_symbols],
+        }
+        return pd.DataFrame(data)
 
-def display_status_table(status_table, current_status, bot, chosen_symbols):
-    status_df = pd.DataFrame({
-        'Symbol': chosen_symbols,
-        'Current Price': [f"{current_status['prices'][symbol]:.4f}" if current_status['prices'][symbol] is not None else "N/A" for symbol in chosen_symbols],
-        'Buy Price': [f"{next((trade['buy_price'] for trade in current_status['active_trades'].values() if trade['symbol'] == symbol), None):.4f}" if any(trade['symbol'] == symbol for trade in current_status['active_trades'].values()) else 'N/A' for symbol in chosen_symbols],
-        'Target Sell Price': [f"{next((trade['target_sell_price'] for trade in current_status['active_trades'].values() if trade['symbol'] == symbol), None):.4f}" if any(trade['symbol'] == symbol for trade in current_status['active_trades'].values()) else 'N/A' for symbol in chosen_symbols],
-        'Current P/L': [f"{(current_status['prices'][symbol] - next((trade['buy_price'] for trade in current_status['active_trades'].values() if trade['symbol'] == symbol), current_status['prices'][symbol])) / next((trade['buy_price'] for trade in current_status['active_trades'].values() if trade['symbol'] == symbol), current_status['prices'][symbol]) * 100:.2f}%" if current_status['prices'][symbol] is not None and any(trade['symbol'] == symbol for trade in current_status['active_trades'].values()) else 'N/A' for symbol in chosen_symbols],
-        'Active Trade': ['Yes' if any(trade['symbol'] == symbol for trade in current_status['active_trades'].values()) else 'No' for symbol in chosen_symbols],
-        'Realized Profit': [f"{current_status['profits'].get(symbol, 0):.4f}" for symbol in chosen_symbols]
-    })
-    status_df = pd.concat([status_df, pd.DataFrame({
-        'Symbol': ['Total', 'Current Total USDT', 'Tradable USDT', 'Liquid USDT'],
-        'Current Price': ['', f"{current_status['current_total_usdt']:.4f}", f"{current_status['tradable_usdt']:.4f}", f"{current_status['liquid_usdt']:.4f}"],
-        'Buy Price': ['', '', '', ''],
-        'Target Sell Price': ['', '', '', ''],
-        'Current P/L': ['', '', '', ''],
-        'Active Trade': ['', '', '', ''],
-        'Realized Profit': [f"{bot.total_profit:.4f}", '', '', '']
-    })], ignore_index=True)
+    def add_summary_rows(self, status_df, current_status):
+        summary_data = {
+            'Symbol': ['Total', 'Current Total USDT', 'Tradable USDT', 'Liquid USDT'],
+            'Current Price': ['', f"{current_status['current_total_usdt']:.4f}", f"{current_status['tradable_usdt']:.4f}", f"{current_status['liquid_usdt']:.4f}"],
+            'Buy Price': ['', '', '', ''],
+            'Target Sell Price': ['', '', '', ''],
+            'Current P/L': ['', '', '', ''],
+            'Active Trade': ['', '', '', ''],
+            'Realized Profit': [f"{self.bot.total_profit:.4f}", '', '', ''],
+        }
+        summary_df = pd.DataFrame(summary_data)
+        return pd.concat([status_df, summary_df], ignore_index=True)
 
-    status_table.table(status_df)
+    def format_price(self, price):
+        return f"{price:.4f} USDT" if price is not None else "N/A"
 
-def display_trade_messages(trade_messages):
-    trade_messages.text("\n".join(st.session_state.trade_messages[-10:]))  # Display last 10 messages
+    def format_buy_price(self, active_trades, symbol):
+        buy_order = next((trade for trade in active_trades.values() if trade['symbol'] == symbol), None)
+        return f"{buy_order['buy_price']:.4f} USDT" if buy_order else 'N/A'
 
-def display_error_message(error_placeholder):
-    if st.session_state.error_message:
-        error_placeholder.error(st.session_state.error_message)
-        st.session_state.error_message = ""  # Clear the error message after displaying
+    def format_target_sell_price(self, active_trades, symbol):
+        buy_order = next((trade for trade in active_trades.values() if trade['symbol'] == symbol), None)
+        return f"{buy_order['target_sell_price']:.4f} USDT" if buy_order else 'N/A'
+
+    def format_current_pl(self, prices, active_trades, symbol):
+        current_price = prices[symbol]
+        buy_order = next((trade for trade in active_trades.values() if trade['symbol'] == symbol), current_price)
+        if current_price is not None and buy_order:
+            return f"{(current_price - buy_order['buy_price']) / buy_order['buy_price'] * 100:.2f}%"
+        else:
+            return 'N/A'
+
+    def format_active_trade(self, active_trades, symbol):
+        return 'Yes' if any(trade['symbol'] == symbol for trade in active_trades.values()) else 'No'
+
+    def format_realized_profit(self, profits, symbol):
+        return f"{profits.get(symbol, 0):.4f}"
+
+class TradeMessages:
+    def __init__(self, trade_messages):
+        self.trade_messages = trade_messages
+
+    def display(self):
+        self.trade_messages.text("\n".join(st.session_state.trade_messages[-10:]))  # Display last 10 messages
+
+class ErrorMessage:
+    def __init__(self, error_placeholder):
+        self.error_placeholder = error_placeholder
+
+    def display(self):
+        if st.session_state.error_message:
+            self.error_placeholder.error(st.session_state.error_message)
+            st.session_state.error_message = ""  # Clear the error message after displaying
