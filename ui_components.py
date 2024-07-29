@@ -60,7 +60,7 @@ class StatusTable:
     def create_symbol_status_dataframe(self, current_status):
         data = {
             'Symbol': self.chosen_symbols,
-            'Current Price': [self.format_price(current_status['prices'][symbol]) for symbol in self.chosen_symbols],
+            'Current Price': [self.format_price(current_status['prices'].get(symbol, None)) for symbol in self.chosen_symbols],
             'Buy Price': [self.format_buy_price(current_status['active_trades'], symbol) for symbol in self.chosen_symbols],
             'Target Sell Price': [self.format_target_sell_price(current_status['active_trades'], symbol) for symbol in self.chosen_symbols],
             'Current P/L': [self.format_current_pl(current_status['prices'], current_status['active_trades'], symbol) for symbol in self.chosen_symbols],
@@ -94,7 +94,7 @@ class StatusTable:
         return f"{buy_order['target_sell_price']:.4f} USDT" if buy_order else 'N/A'
 
     def format_current_pl(self, prices, active_trades, symbol):
-        current_price = prices[symbol]
+        current_price = prices.get(symbol, None)
         buy_order = next((trade for trade in active_trades.values() if trade['symbol'] == symbol), None)
         if current_price is not None and buy_order and buy_order['buy_price'] != 0:
             return f"{(current_price - buy_order['buy_price']) / buy_order['buy_price'] * 100:.2f}%"
