@@ -263,7 +263,8 @@ class TradingBot:
         if self.is_simulation:
             order_id = f"sim_buy_{symbol}_{time.time()}"
             self.wallet.update_account_balance("trading", "USDT", self.get_account_balance('USDT') - amount_usdt)
-            self.wallet.update_account_balance("trading", symbol.split('-')[0], self.get_account_balance(symbol.split('-')[0]) + amount_crypto)
+            current_crypto_balance = self.get_account_balance(symbol.split('-')[0])
+            self.wallet.update_account_balance("trading", symbol.split('-')[0], current_crypto_balance + amount_crypto)
         else:
             try:
                 order = self.trading_client.trade_client.create_market_order(symbol, 'buy', funds=amount_usdt)
@@ -273,11 +274,16 @@ class TradingBot:
                 current_price = float(order_details['dealFunds']) / float(order_details['dealSize'])
                 amount_crypto = float(order_details['dealSize'])
                 fee_usdt = float(order_details['fee'])
+                
+                # Update wallet balances
                 self.wallet.update_account_balance("trading", "USDT", self.get_account_balance('USDT') - amount_usdt)
-                self.wallet.update_account_balance("trading", symbol.split('-')[0], self.get_account_balance(symbol.split('-')[0]) + amount_crypto)
+                current_crypto_balance = self.get_account_balance(symbol.split('-')[0])
+                self.wallet.update_account_balance("trading", symbol.split('-')[0], current_crypto_balance + amount_crypto)
             except Exception as e:
                 logger.error(f"Error placing buy order for {symbol}: {e}")
                 return None
+
+        logger.info(f"Placed buy order for {symbol}: {amount_usdt:.4f} USDT at {current_price:.4f}, Order ID: {order_id}")
         return {'orderId': order_id, 'price': current_price, 'amount': amount_crypto, 'fee_usdt': fee_usdt}
 
     def place_market_sell_order(self, symbol, amount_crypto, target_sell_price):
