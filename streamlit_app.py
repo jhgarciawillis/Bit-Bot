@@ -102,13 +102,15 @@ def main():
             try:
                 charts = chart_creator.create_charts()
                 with charts_container:
-                    st.plotly_chart(charts, use_container_width=False)  # Update charts container
-
-                current_prices = bot.trading_client.get_current_prices(user_selected_symbols)
-                current_status = bot.get_current_status(current_prices)
-                table_container.empty()  # Clear previous table
-                with table_container:  # Update table container
-                    StatusTable(table_container, bot, user_selected_symbols).display(current_status)
+                    col1, col2 = st.columns([1, 2])  # Adjust the column widths as needed
+                    with col1:
+                        st.plotly_chart(charts, use_container_width=False)  # Update charts container
+                    with col2:
+                        current_prices = bot.trading_client.get_current_prices(user_selected_symbols)
+                        current_status = bot.get_current_status(current_prices)
+                        table_container.empty()  # Clear previous table
+                        with table_container:  # Update table container
+                            StatusTable(table_container, bot, user_selected_symbols).display(current_status)
 
                 TradeMessages(trade_messages).display()
 
