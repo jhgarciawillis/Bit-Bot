@@ -17,10 +17,12 @@ def main():
     st.title("Cryptocurrency Trading Bot")
 
     sidebar_config = SidebarConfig()
-    (
-        is_simulation,
-        simulated_usdt_balance,
-    ) = sidebar_config.configure()
+    config_result = sidebar_config.configure()
+    
+    if config_result is None:
+        return  # Exit if the user didn't confirm for live trading
+    
+    is_simulation, simulated_usdt_balance = config_result
 
     api_key = st.secrets["api_credentials"]["api_key"]
     api_secret = st.secrets["api_credentials"]["api_secret"]
@@ -39,20 +41,13 @@ def main():
         total_usdt_balance = bot.get_account_balance('USDT')
         st.sidebar.write(f"Simulated USDT Balance: {total_usdt_balance:.4f}")
     else:
-        st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
-        st.sidebar.warning("Only proceed if you understand the risks and are using funds you can afford to lose.")
-        proceed = st.sidebar.checkbox("I understand the risks and want to proceed", key="proceed_checkbox")
-        if not proceed:
-            st.sidebar.error("Please check the box to proceed with live trading.")
-            return
+        bot.initialize()
+        total_usdt_balance = bot.get_account_balance('USDT')
+        if total_usdt_balance is not None:
+            st.sidebar.write(f"Confirmed USDT Balance: {total_usdt_balance:.4f}")
         else:
-            bot.initialize()
-            total_usdt_balance = bot.get_account_balance('USDT')
-            if total_usdt_balance is not None:
-                st.sidebar.write(f"Confirmed USDT Balance: {total_usdt_balance:.4f}")
-            else:
-                st.sidebar.error("Unable to fetch USDT balance. Please check your API credentials and connection.")
-                return
+            st.sidebar.error("Unable to fetch USDT balance. Please check your API credentials and connection.")
+            return
 
     # Get user inputs
     if bot.trading_client.market_client is not None:
