@@ -84,8 +84,10 @@ def main():
     ) / 100
     num_orders_per_trade = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
 
-    charts_placeholder = st.empty()
-    status_table = st.empty()
+    # Create separate containers for charts and table
+    charts_container = st.container()
+    table_container = st.container()
+
     trade_messages = st.empty()
     error_placeholder = st.empty()
 
@@ -99,19 +101,22 @@ def main():
         while True:
             try:
                 charts = chart_creator.create_charts()
-                charts_placeholder.plotly_chart(charts, use_container_width=True)
+                charts_container.plotly_chart(charts, use_container_width=True)  # Update charts container
 
                 current_prices = bot.trading_client.get_current_prices(user_selected_symbols)
                 current_status = bot.get_current_status(current_prices)
-                StatusTable(status_table, bot, user_selected_symbols).display(current_status)
+                table_container.empty()  # Clear previous table
+                with table_container:  # Update table container
+                    StatusTable(table_container, bot, user_selected_symbols).display(current_status)
 
                 TradeMessages(trade_messages).display()
-                ErrorMessage(error_placeholder).display()
 
                 time.sleep(1)
             except Exception as e:
                 st.error(f"An error occurred in the main loop: {e}")
                 time.sleep(5)
+
+    ErrorMessage(error_placeholder).display()  # Display error message outside the loop
 
 if __name__ == "__main__":
     main()
