@@ -85,8 +85,8 @@ def main():
     num_orders_per_trade = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
 
     # Create containers for charts and table
-    charts_container = st.container()
-    table_container = st.empty()
+    chart_container = st.container()
+    table_container = st.container()
 
     trade_messages = st.empty()
     error_placeholder = st.empty()
@@ -98,19 +98,17 @@ def main():
         trading_thread.start()
 
         chart_creator = ChartCreator(bot)
+
         while True:
             try:
-                charts = chart_creator.create_charts()
-                with charts_container:
-                    col1, col2 = st.columns([1, 2])  # Adjust the column widths as needed
-                    with col1:
-                        st.plotly_chart(charts, use_container_width=False)  # Update charts container
-                    with col2:
-                        current_prices = bot.trading_client.get_current_prices(user_selected_symbols)
-                        current_status = bot.get_current_status(current_prices)
-                        table_container.empty()  # Clear previous table
-                        with table_container:  # Update table container
-                            StatusTable(table_container, bot, user_selected_symbols).display(current_status)
+                with chart_container:
+                    charts = chart_creator.create_charts()
+                    st.plotly_chart(charts, use_container_width=True)
+
+                with table_container:
+                    current_prices = bot.trading_client.get_current_prices(user_selected_symbols)
+                    current_status = bot.get_current_status(current_prices)
+                    StatusTable(table_container, bot, user_selected_symbols).display(current_status)
 
                 TradeMessages(trade_messages).display()
 
