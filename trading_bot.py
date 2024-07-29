@@ -66,13 +66,17 @@ class TradingBot:
         logger.debug(f"Getting account balance for {currency}")
         if not self.is_simulation:
             try:
-                account_balance = self.user_client.get_account(currency, account_type='trading')
+                account_balance = self.user_client.get_account(currency, account_type='trade')
                 return float(account_balance['available'])
             except Exception as e:
                 logger.error(f"Error fetching account balance for {currency}: {type(e).__name__}")
                 return 0
         else:
             return self.wallet.get_account("trading").get_currency_balance(currency)
+
+    def print_total_usdt_balance(self):
+        total_usdt = self.get_account_balance('USDT')
+        st.sidebar.write(f"Total USDT Balance: {total_usdt:.4f}")
 
     def get_user_allocations(self, symbols, total_usdt):
         logger.debug("Getting user allocations")
