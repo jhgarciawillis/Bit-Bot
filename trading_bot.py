@@ -145,6 +145,9 @@ class TradingBot:
     def get_account_balance(self, currency='USDT'):
         return self.wallet.get_account("trading").get_currency_balance(currency)
 
+    def get_tradable_balance(self, currency='USDT'):
+        return self.wallet.get_account("trading").get_currency_balance(currency)
+
     def get_user_allocations(self, user_selected_symbols, total_usdt_balance):
         tradable_usdt_amount = total_usdt_balance * (1 - self.usdt_liquid_percentage)
         
