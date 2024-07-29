@@ -71,4 +71,4 @@ def trading_loop(bot: TradingBot, chosen_symbols, profit_margin, num_orders):
         except Exception as e:
             logger.error(f"An error occurred in the trading loop: {str(e)}")
             st.session_state.error_message = f"An error occurred: {str(e)}"
-            time.sleep(5)  # Wait for 5 seconds before the next iteration
+            time.sleep(1)  # Wait for 5 seconds before the next iteration
