@@ -16,13 +16,17 @@ def main():
     st.set_page_config(layout="wide")
     st.title("Cryptocurrency Trading Bot")
 
-    api_key, api_secret, api_passphrase, api_url, is_simulation = configure_sidebar()
+    (
+        api_key,
+        api_secret,
+        api_passphrase,
+        api_url,
+        is_simulation,
+        bot
+    ) = configure_sidebar()
 
-    # Initialize the trading bot
     if 'bot' not in st.session_state:
-        st.session_state.bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
-        st.session_state.bot.is_simulation = is_simulation
-        st.session_state.bot.initialize_clients()
+        st.session_state.bot = bot
 
     bot = st.session_state.bot
 
