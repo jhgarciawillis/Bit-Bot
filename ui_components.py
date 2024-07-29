@@ -1,10 +1,11 @@
-import pandas as pd
 import streamlit as st
 from trading_bot import TradingBot
+import pandas as pd
 
 class SidebarConfig:
-    def __init__(self, bot: TradingBot):
-        self.bot = bot
+    def __init__(self):
+        self.is_simulation = None
+        self.simulated_usdt_balance = None
 
     def configure(self):
         st.sidebar.header("Configuration")
@@ -17,30 +18,20 @@ class SidebarConfig:
         else:
             self.configure_live_mode()
 
-        self.bot.print_total_usdt_balance()
-
         return (
-            self.api_key,
-            self.api_secret,
-            self.api_passphrase,
-            self.api_url,
             self.is_simulation,
+            self.simulated_usdt_balance,
         )
 
     def configure_simulation_mode(self):
         st.sidebar.write("Running in simulation mode. No real trades will be executed.")
-        self.api_key = "simulation"
-        self.api_secret = "simulation"
-        self.api_passphrase = "simulation"
-        self.api_url = "https://api.kucoin.com"  # You can use the real URL even for simulation
         self.simulated_usdt_balance = st.sidebar.number_input(
             f"Simulated USDT Balance",
-            key=f"simulated_usdt_balance_{id(self.bot)}",
+            key=f"simulated_usdt_balance",
             min_value=0.0,
             value=1000.0,
             step=0.1
         )
-        self.bot.simulated_usdt_balance = self.simulated_usdt_balance
 
     def configure_live_mode(self):
         st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
@@ -48,16 +39,8 @@ class SidebarConfig:
         proceed = st.sidebar.checkbox("I understand the risks and want to proceed")
         if not proceed:
             st.sidebar.error("Please check the box to proceed with live trading.")
-            self.api_key = None
-            self.api_secret = None
-            self.api_passphrase = None
-            self.api_url = None
-        else:
-            # Use secrets for API credentials in live mode
-            self.api_key = st.secrets["api_credentials"]["api_key"]
-            self.api_secret = st.secrets["api_credentials"]["api_secret"]
-            self.api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
-            self.api_url = "https://api.kucoin.com"
+            self.is_simulation = True
+            self.simulated_usdt_balance = None
 
 class StatusTable:
     def __init__(self, status_table, bot: TradingBot, chosen_symbols):
