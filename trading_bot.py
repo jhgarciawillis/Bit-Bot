@@ -62,6 +62,18 @@ class TradingBot:
         logger.debug("Getting user symbol choices")
         return st.sidebar.multiselect("Select Symbols to Trade", available_symbols)
 
+    def get_account_balance(self, currency='USDT'):
+        logger.debug(f"Getting account balance for {currency}")
+        if not self.is_simulation:
+            try:
+                account_balance = self.user_client.get_account(currency)
+                return float(account_balance['available'])
+            except Exception as e:
+                logger.error(f"Error fetching account balance for {currency}: {type(e).__name__}")
+                return 0
+        else:
+            return self.wallet.get_account("trading").get_currency_balance(currency)
+
     def get_user_allocations(self, symbols, total_usdt):
         logger.debug("Getting user allocations")
         
@@ -94,18 +106,6 @@ class TradingBot:
                 self.profits[symbol] = 0
         
         return allocations, tradable_usdt
-
-    def get_account_balance(self, currency='USDT'):
-        logger.debug(f"Getting account balance for {currency}")
-        if not self.is_simulation:
-            try:
-                account_balance = self.user_client.get_account(currency)
-                return float(account_balance['available'])
-            except Exception as e:
-                logger.error(f"Error fetching account balance for {currency}: {type(e).__name__}")
-                return 0
-        else:
-            return self.wallet.get_account("trading").get_currency_balance(currency)
 
     def get_current_prices(self, symbols):
         prices = {}
