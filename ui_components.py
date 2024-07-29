@@ -3,45 +3,30 @@ from trading_bot import TradingBot
 import pandas as pd
 
 class SidebarConfig:
-    def __init__(self):
-        self.is_simulation = None
-        self.simulated_usdt_balance = None
-
     def configure(self):
         st.sidebar.header("Configuration")
 
-        # Simulation mode toggle
-        self.is_simulation = st.sidebar.checkbox("Simulation Mode", value=True)
+        is_simulation = st.sidebar.checkbox("Simulation Mode", value=True)
+        simulated_usdt_balance = 1000.0
 
-        if self.is_simulation:
-            self.configure_simulation_mode()
+        if is_simulation:
+            st.sidebar.write("Running in simulation mode. No real trades will be executed.")
+            simulated_usdt_balance = st.sidebar.number_input(
+                "Simulated USDT Balance",
+                min_value=0.0,
+                value=1000.0,
+                step=0.1
+            )
         else:
-            self.configure_live_mode()
+            st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
+            st.sidebar.warning("Only proceed if you understand the risks and are using funds you can afford to lose.")
+            proceed = st.sidebar.checkbox("I understand the risks and want to proceed", key="proceed_checkbox")
+            if not proceed:
+                st.sidebar.error("Please check the box to proceed with live trading.")
+                return None, None
 
-        return (
-            self.is_simulation,
-            self.simulated_usdt_balance,
-        )
-
-    def configure_simulation_mode(self):
-        st.sidebar.write("Running in simulation mode. No real trades will be executed.")
-        self.simulated_usdt_balance = st.sidebar.number_input(
-            f"Simulated USDT Balance",
-            key=f"simulated_usdt_balance",
-            min_value=0.0,
-            value=1000.0,
-            step=0.1
-        )
-
-    def configure_live_mode(self):
-        st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
-        st.sidebar.warning("Only proceed if you understand the risks and are using funds you can afford to lose.")
-        proceed = st.sidebar.checkbox("I understand the risks and want to proceed")
-        if not proceed:
-            st.sidebar.error("Please check the box to proceed with live trading.")
-            self.is_simulation = True
-            self.simulated_usdt_balance = None
-
+        return is_simulation, simulated_usdt_balance
+    
 class StatusTable:
     def __init__(self, status_table, bot: TradingBot, chosen_symbols):
         self.status_table = status_table
