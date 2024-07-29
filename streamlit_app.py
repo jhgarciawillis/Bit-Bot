@@ -29,15 +29,26 @@ def main():
 
     bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
     bot.is_simulation = is_simulation
-    if is_simulation:
-        bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
 
     if 'bot' not in st.session_state:
         st.session_state.bot = bot
 
-    bot.initialize()
-    total_usdt_balance = bot.get_account_balance('USDT')
-    st.sidebar.write(f"Confirmed USDT Balance: {total_usdt_balance:.4f}")
+    if is_simulation:
+        bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
+        bot.initialize()
+        total_usdt_balance = bot.get_account_balance('USDT')
+        st.sidebar.write(f"Simulated USDT Balance: {total_usdt_balance:.4f}")
+    else:
+        st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
+        st.sidebar.warning("Only proceed if you understand the risks and are using funds you can afford to lose.")
+        proceed = st.sidebar.checkbox("I understand the risks and want to proceed")
+        if not proceed:
+            st.sidebar.error("Please check the box to proceed with live trading.")
+            return
+        else:
+            bot.initialize()
+            total_usdt_balance = bot.get_account_balance('USDT')
+            st.sidebar.write(f"Confirmed USDT Balance: {total_usdt_balance:.4f}")
 
     # Get user inputs
     if bot.trading_client.market_client is not None:
