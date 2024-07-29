@@ -46,22 +46,17 @@ def main():
         api_secret = st.secrets["api_credentials"]["api_secret"]
         api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
     else:
-        try:
-            user_api_key = st.sidebar.text_input("Enter your personal API key:", type="password")
-            if user_api_key != st.secrets.get("perso_key", ""):
-                st.sidebar.warning("Invalid API key. Please enter the correct key to proceed.")
-                st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided.")
-                st.sidebar.button("Start Trading", disabled=True)
-                return
-            else:
-                st.sidebar.success("API key verified. You can now start trading.")
-
+        user_api_key = st.sidebar.text_input("Enter your personal API key:", type="password")
+        if user_api_key != st.secrets.get("perso_key", ""):
+            st.sidebar.warning("Invalid API key. Please enter the correct key to proceed.")
+            st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided.")
+            st.sidebar.button("Start Trading", disabled=True)
+            api_key, api_secret, api_passphrase = None, None, None
+        else:
+            st.sidebar.success("API key verified. You can now start trading.")
             api_key = st.secrets["api_credentials"]["api_key"]
             api_secret = st.secrets["api_credentials"]["api_secret"]
             api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
-        except KeyError:
-            st.sidebar.error("Personal API key not found in Streamlit secrets. Please contact the app administrator.")
-            return
 
     if 'bot' not in st.session_state:
         st.session_state.bot = TradingBot(api_key, api_secret, api_passphrase, API_URL)
@@ -71,7 +66,7 @@ def main():
 
     if is_simulation:
         bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
-    else:
+    elif api_key and api_secret and api_passphrase:
         bot.initialize()
     
     total_usdt_balance = bot.get_account_balance('USDT')
@@ -109,7 +104,7 @@ def main():
 
     understand_checkbox = st.sidebar.checkbox("I understand the risks and want to proceed")
 
-    if user_api_key == st.secrets.get("perso_key", "") and understand_checkbox:
+    if user_api_key == st.secrets.get("perso_key", "") and understand_checkbox and api_key and api_secret and api_passphrase:
         if st.sidebar.button("Start Trading"):
             trading_thread = threading.Thread(target=trading_loop, args=(bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade))
             trading_thread.start()
