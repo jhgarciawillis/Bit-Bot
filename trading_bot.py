@@ -157,10 +157,10 @@ class TradingBot:
         logger.debug(f"Getting account balance for {currency}")
         return self.wallet.get_account("trading").get_currency_balance(currency)
 
-    def get_user_allocations(self, symbols, total_usdt):
+    def get_user_allocations(self, user_selected_symbols, total_usdt_balance):
         logger.debug("Getting user allocations")
         
-        st.sidebar.write(f"Your current USDT balance in trading account: {total_usdt:.4f} USDT")
+        st.sidebar.write(f"Your current USDT balance in trading account: {total_usdt_balance:.4f} USDT")
         
         self.usdt_liquid_percentage = st.sidebar.number_input(
             "Enter the percentage of your assets to keep liquid in USDT (0-100%)",
@@ -171,29 +171,29 @@ class TradingBot:
             format="%.4f"
         ) / 100
         
-        liquid_usdt = total_usdt * self.usdt_liquid_percentage
-        st.sidebar.write(f"Amount to keep liquid in USDT: {liquid_usdt:.4f} USDT")
+        liquid_usdt_amount = total_usdt_balance * self.usdt_liquid_percentage
+        st.sidebar.write(f"Amount to keep liquid in USDT: {liquid_usdt_amount:.4f} USDT")
 
-        tradable_usdt = total_usdt - liquid_usdt
-        st.sidebar.write(f"USDT available for trading: {tradable_usdt:.4f} USDT")
+        tradable_usdt_amount = total_usdt_balance - liquid_usdt_amount
+        st.sidebar.write(f"USDT available for trading: {tradable_usdt_amount:.4f} USDT")
 
-        if tradable_usdt <= 0:
+        if tradable_usdt_amount <= 0:
             logger.warning("No USDT available for trading")
             return {}, 0
 
-        # Check if symbols is a list and not empty
-        if not isinstance(symbols, list) or len(symbols) == 0:
+        # Check if user_selected_symbols is a list and not empty
+        if not isinstance(user_selected_symbols, list) or len(user_selected_symbols) == 0:
             logger.warning("No symbols provided for allocation")
-            return {}, tradable_usdt
+            return {}, tradable_usdt_amount
 
-        allocations = {symbol: 1 / len(symbols) for symbol in symbols}
+        symbol_allocations = {symbol: 1 / len(user_selected_symbols) for symbol in user_selected_symbols}
         
         # Initialize profits for new symbols
-        for symbol in symbols:
+        for symbol in user_selected_symbols:
             if symbol not in self.profits:
                 self.profits[symbol] = 0
         
-        return allocations, tradable_usdt
+        return symbol_allocations, tradable_usdt_amount
 
     def update_price_history(self, symbols, prices):
         logger.debug("Updating price history")
