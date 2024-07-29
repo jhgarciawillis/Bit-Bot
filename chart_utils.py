@@ -15,7 +15,7 @@ class ChartCreator:
         self.add_target_sell_prices_chart(fig, 2, 1)
         self.add_total_profits_chart(fig, 2, 2)
 
-        fig.update_layout(height=800, showlegend=False)
+        fig.update_layout(height=800, width=800, showlegend=False)  # Updated chart size
         return fig
 
     def add_price_chart(self, fig, row, col):
