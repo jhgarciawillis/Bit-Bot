@@ -30,14 +30,15 @@ class ChartCreator:
                 self.add_buy_sell_price_traces(fig, symbol, chart_type)
 
     def add_buy_sell_price_traces(self, fig, symbol, chart_type):
-        for trade in self.bot.active_trades.values():
-            if trade['symbol'] == symbol:
-                if chart_type == 'Buy Prices':
-                    fig.add_trace(go.Scatter(x=[trade['buy_time']], y=[trade['buy_price']], 
-                                             mode='markers', name=f'{symbol} Buy', marker_symbol='triangle-up'))
-                else:
-                    fig.add_trace(go.Scatter(x=[trade['buy_time']], y=[trade['target_sell_price']], 
-                                             mode='markers', name=f'{symbol} Target Sell', marker_symbol='triangle-down'))
+        for status in self.bot.status_history:
+            for trade in status['active_trades'].values():
+                if trade['symbol'] == symbol:
+                    if chart_type == 'Buy Prices':
+                        fig.add_trace(go.Scatter(x=[trade['buy_time']], y=[trade['buy_price']], 
+                                                 mode='markers', name=f'{symbol} Buy', marker_symbol='triangle-up'))
+                    else:
+                        fig.add_trace(go.Scatter(x=[trade['buy_time']], y=[trade['target_sell_price']], 
+                                                 mode='markers', name=f'{symbol} Target Sell', marker_symbol='triangle-down'))
 
     def add_total_profits_chart(self, fig, chart_type):
         if chart_type == 'Total Profits':
