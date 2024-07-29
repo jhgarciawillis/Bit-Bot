@@ -24,12 +24,13 @@ def trading_loop(bot: TradingBot, chosen_symbols, profit_margin, num_orders):
                 usdt_balance = bot.get_tradable_balance('USDT')
 
                 # Check if we should buy
-                if usdt_balance > 0 and bot.should_buy(symbol, current_price):
+                limit_buy_price = bot.should_buy(symbol, current_price)
+                if usdt_balance > 0 and limit_buy_price is not None:
                     buy_amount_usdt = min(allocated_value, usdt_balance)
                     if buy_amount_usdt > 0:
                         order_amount = buy_amount_usdt / num_orders
                         for _ in range(num_orders):
-                            order = bot.place_market_buy_order(symbol, order_amount)
+                            order = bot.place_limit_buy_order(symbol, order_amount, limit_buy_price)
                             if order:
                                 target_sell_price = order['price'] * (1 + profit_margin + 2*bot.FEE_RATE)
                                 bot.active_trades[order['orderId']] = {
@@ -40,7 +41,7 @@ def trading_loop(bot: TradingBot, chosen_symbols, profit_margin, num_orders):
                                     'fee_usdt': order['fee_usdt'],
                                     'buy_time': current_status['timestamp']
                                 }
-                                st.session_state.trade_messages.append(f"Placed buy order for {symbol}: {order_amount:.4f} USDT at {order['price']:.4f}, Order ID: {order['orderId']}")
+                                st.session_state.trade_messages.append(f"Placed limit buy order for {symbol}: {order_amount:.4f} USDT at {order['price']:.4f}, Order ID: {order['orderId']}")
 
                 # Check active trades for selling
                 for order_id, trade in list(bot.active_trades.items()):
