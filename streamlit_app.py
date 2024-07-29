@@ -26,7 +26,7 @@ def get_available_trading_symbols(market_client):
 
 def main():
     st.set_page_config(layout="wide")
-    st.sidebar.title("Cryptocurrency Trading Bot")  # Move the title to the sidebar
+    st.sidebar.title("Cryptocurrency Trading Bot")
 
     sidebar_config = SidebarConfig()
     config_result = sidebar_config.configure()
@@ -85,7 +85,7 @@ def main():
     num_orders_per_trade = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
 
     # Create containers for charts and table
-    charts_container = st.empty()
+    charts_container = st.container()
     table_container = st.empty()
 
     trade_messages = st.empty()
@@ -101,7 +101,8 @@ def main():
         while True:
             try:
                 charts = chart_creator.create_charts()
-                charts_container.plotly_chart(charts, use_container_width=True)  # Update charts container
+                with charts_container:
+                    st.plotly_chart(charts, use_container_width=False)  # Update charts container
 
                 current_prices = bot.trading_client.get_current_prices(user_selected_symbols)
                 current_status = bot.get_current_status(current_prices)
