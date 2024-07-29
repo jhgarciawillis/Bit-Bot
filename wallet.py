@@ -79,38 +79,6 @@ class Wallet:
         if account_type in self.accounts:
             self.accounts[account_type].update_currency_price(symbol, price)
 
-    def simulate_market_buy(self, account_type, symbol, amount_usdt, price):
-        account = self.get_account(account_type)
-        if not account:
-            return False
-
-        usdt_balance = account.get_currency_balance('USDT')
-        if usdt_balance < amount_usdt:
-            return False
-
-        amount_crypto = amount_usdt / price
-        account.update_currency_balance('USDT', usdt_balance - amount_usdt)
-        current_crypto_balance = account.get_currency_balance(symbol)
-        account.update_currency_balance(symbol, current_crypto_balance + amount_crypto)
-        account.currencies[symbol].record_buy(amount_crypto, price)
-        return True
-
-    def simulate_market_sell(self, account_type, symbol, amount_crypto, price):
-        account = self.get_account(account_type)
-        if not account:
-            return False
-
-        crypto_balance = account.get_currency_balance(symbol)
-        if crypto_balance < amount_crypto:
-            return False
-
-        amount_usdt = amount_crypto * price
-        account.update_currency_balance(symbol, crypto_balance - amount_crypto)
-        current_usdt_balance = account.get_currency_balance('USDT')
-        account.update_currency_balance('USDT', current_usdt_balance + amount_usdt)
-        account.currencies[symbol].record_sell(amount_crypto, price)
-        return True
-
     def get_account_summary(self):
         summary = {}
         for account_type, account in self.accounts.items():
