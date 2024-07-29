@@ -103,7 +103,7 @@ def main():
 
     understand_checkbox = st.sidebar.checkbox("I understand the risks and want to proceed")
 
-    if (user_api_key == st.secrets.get("perso_key", "") and understand_checkbox and api_key and api_secret and api_passphrase) or is_simulation:
+    if is_simulation or (user_api_key == st.secrets.get("perso_key", "") and understand_checkbox and api_key and api_secret and api_passphrase):
         if st.sidebar.button("Start Trading"):
             trading_thread = threading.Thread(target=trading_loop, args=(bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade))
             trading_thread.start()
