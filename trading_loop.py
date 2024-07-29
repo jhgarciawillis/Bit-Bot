@@ -22,7 +22,7 @@ def trading_loop(bot: TradingBot, chosen_symbols, profit_margin, num_orders):
 
                 allocated_value = bot.symbol_allocations[symbol] * tradable_usdt
                 base_currency = symbol.split('-')[0]
-                base_balance = bot.get_account_balance(base_currency)
+                base_balance = bot.get_account_balance('USDT')  # We're always trading with USDT
 
                 # Check if we should buy
                 if base_balance > 0 and bot.should_buy(symbol, current_price):
