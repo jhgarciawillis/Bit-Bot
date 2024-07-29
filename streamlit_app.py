@@ -16,20 +16,18 @@ def main():
     st.set_page_config(layout="wide")
     st.title("Cryptocurrency Trading Bot")
 
-    sidebar_config = SidebarConfig(TradingBot)
+    bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
+    sidebar_config = SidebarConfig(bot)
     (
         api_key,
         api_secret,
         api_passphrase,
         api_url,
         is_simulation,
-        bot
     ) = sidebar_config.configure()
 
     if 'bot' not in st.session_state:
         st.session_state.bot = bot
-
-    bot = st.session_state.bot
 
     if not is_simulation:
         total_usdt = bot.get_account_balance('USDT')
