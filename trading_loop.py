@@ -21,7 +21,7 @@ def trading_loop(bot: TradingBot, chosen_symbols, profit_margin, num_orders):
                     continue
 
                 allocated_value = bot.symbol_allocations[symbol] * tradable_usdt
-                base_currency = symbol.split('-')[1]
+                base_currency = symbol.split('-')[0]
                 base_balance = bot.get_account_balance(base_currency)
 
                 # Check if we should buy
@@ -47,9 +47,9 @@ def trading_loop(bot: TradingBot, chosen_symbols, profit_margin, num_orders):
                 for order_id, trade in list(bot.active_trades.items()):
                     if trade['symbol'] == symbol and current_price >= trade['target_sell_price']:
                         sell_amount_crypto = trade['amount']
-                        sell_order = bot.place_market_sell_order(symbol, sell_amount_crypto)
+                        sell_order = bot.place_market_sell_order(symbol, sell_amount_crypto, trade['target_sell_price'])
                         if sell_order:
-                            sell_amount_usdt = sell_order['amount']
+                            sell_amount_usdt = sell_order['amount_usdt']
                             total_fee = trade['fee_usdt'] + sell_order['fee_usdt']
                             profit = sell_amount_usdt - (trade['amount'] * trade['buy_price']) - total_fee
                             bot.profits[symbol] += profit
