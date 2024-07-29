@@ -72,10 +72,13 @@ class TradingBot:
                 logger.error(f"Error fetching account balance for {currency}: {type(e).__name__}")
                 return 0
         else:
-            return self.wallet.get_account("trading").get_currency_balance(currency)
+            return self.simulated_usdt_balance
 
     def print_total_usdt_balance(self):
-        total_usdt = self.get_account_balance('USDT')
+        if self.is_simulation:
+            total_usdt = self.simulated_usdt_balance
+        else:
+            total_usdt = self.get_account_balance('USDT')
         st.sidebar.write(f"Total USDT Balance: {total_usdt:.4f}")
 
     def get_user_allocations(self, symbols, total_usdt):
