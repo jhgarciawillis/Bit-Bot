@@ -9,14 +9,14 @@ class ChartCreator:
 
     def create_charts(self):
         fig = sp.make_subplots(rows=2, cols=2, subplot_titles=("Price", "Buy Prices", "Target Sell Prices", "Total Profits"),
-                               horizontal_spacing=0.1, vertical_spacing=0.1)  # Adjust spacing between subplots
+                               horizontal_spacing=0.1, vertical_spacing=0.1)
 
         self.add_price_chart(fig, 1, 1)
         self.add_buy_prices_chart(fig, 1, 2)
         self.add_target_sell_prices_chart(fig, 2, 1)
         self.add_total_profits_chart(fig, 2, 2)
 
-        fig.update_layout(height=400, width=800, showlegend=False, margin=dict(l=20, r=20, t=40, b=20))  # Updated chart size and margins
+        fig.update_layout(height=400, width=600, showlegend=False, margin=dict(l=20, r=20, t=40, b=20))
         return fig
 
     def add_price_chart(self, fig, row, col):
