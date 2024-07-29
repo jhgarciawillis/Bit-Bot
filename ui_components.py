@@ -40,11 +40,11 @@ def display_status_table(status_table, current_status, bot, chosen_symbols):
     status_df = pd.DataFrame({
         'Symbol': chosen_symbols,
         'Current Price': [f"{current_status['prices'][symbol]:.4f}" if current_status['prices'][symbol] is not None else "N/A" for symbol in chosen_symbols],
-        'Buy Price': [f"{next((trade['buy_price'] for trade in bot.active_trades.values() if trade['symbol'] == symbol), None):.4f}" if any(trade['symbol'] == symbol for trade in bot.active_trades.values()) else 'N/A' for symbol in chosen_symbols],
-        'Target Sell Price': [f"{next((trade['target_sell_price'] for trade in bot.active_trades.values() if trade['symbol'] == symbol), None):.4f}" if any(trade['symbol'] == symbol for trade in bot.active_trades.values()) else 'N/A' for symbol in chosen_symbols],
-        'Current P/L': [f"{(current_status['prices'][symbol] - next((trade['buy_price'] for trade in bot.active_trades.values() if trade['symbol'] == symbol), current_status['prices'][symbol])) / next((trade['buy_price'] for trade in bot.active_trades.values() if trade['symbol'] == symbol), current_status['prices'][symbol]) * 100:.2f}%" if current_status['prices'][symbol] is not None and any(trade['symbol'] == symbol for trade in bot.active_trades.values()) else 'N/A' for symbol in chosen_symbols],
-        'Active Trade': ['Yes' if any(trade['symbol'] == symbol for trade in bot.active_trades.values()) else 'No' for symbol in chosen_symbols],
-        'Realized Profit': [f"{bot.profits.get(symbol, 0):.4f}" for symbol in chosen_symbols]
+        'Buy Price': [f"{next((trade['buy_price'] for trade in current_status['active_trades'].values() if trade['symbol'] == symbol), None):.4f}" if any(trade['symbol'] == symbol for trade in current_status['active_trades'].values()) else 'N/A' for symbol in chosen_symbols],
+        'Target Sell Price': [f"{next((trade['target_sell_price'] for trade in current_status['active_trades'].values() if trade['symbol'] == symbol), None):.4f}" if any(trade['symbol'] == symbol for trade in current_status['active_trades'].values()) else 'N/A' for symbol in chosen_symbols],
+        'Current P/L': [f"{(current_status['prices'][symbol] - next((trade['buy_price'] for trade in current_status['active_trades'].values() if trade['symbol'] == symbol), current_status['prices'][symbol])) / next((trade['buy_price'] for trade in current_status['active_trades'].values() if trade['symbol'] == symbol), current_status['prices'][symbol]) * 100:.2f}%" if current_status['prices'][symbol] is not None and any(trade['symbol'] == symbol for trade in current_status['active_trades'].values()) else 'N/A' for symbol in chosen_symbols],
+        'Active Trade': ['Yes' if any(trade['symbol'] == symbol for trade in current_status['active_trades'].values()) else 'No' for symbol in chosen_symbols],
+        'Realized Profit': [f"{current_status['profits'].get(symbol, 0):.4f}" for symbol in chosen_symbols]
     })
     status_df = pd.concat([status_df, pd.DataFrame({
         'Symbol': ['Total', 'Current Total USDT', 'Tradable USDT', 'Liquid USDT'],
