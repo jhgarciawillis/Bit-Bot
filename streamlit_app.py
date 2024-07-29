@@ -16,15 +16,20 @@ def main():
     st.set_page_config(layout="wide")
     st.title("Cryptocurrency Trading Bot")
 
-    bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
-    sidebar_config = SidebarConfig(bot)
+    sidebar_config = SidebarConfig()
     (
-        api_key,
-        api_secret,
-        api_passphrase,
-        api_url,
         is_simulation,
+        simulated_usdt_balance,
     ) = sidebar_config.configure()
+
+    api_key = st.secrets["api_credentials"]["api_key"]
+    api_secret = st.secrets["api_credentials"]["api_secret"]
+    api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
+    api_url = "https://api.kucoin.com"
+
+    bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
+    if is_simulation:
+        bot.simulated_usdt_balance = simulated_usdt_balance
 
     if 'bot' not in st.session_state:
         st.session_state.bot = bot
