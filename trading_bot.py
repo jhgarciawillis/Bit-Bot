@@ -251,18 +251,68 @@ class TradingBot:
         return status
 
     def place_market_buy_order(self, symbol, amount_usdt):
-        order = self.trading_client.place_market_order(symbol, amount_usdt, 'buy')
-        if order:
-            self.wallet.update_account_balance("trading", "USDT", self.get_account_balance('USDT') - amount_usdt)
-            self.wallet.update_account_balance("trading", symbol.split('-')[0], self.get_account_balance(symbol.split('-')[0]) + order['amount'])
-        return order
+        current_price = self.trading_client.get_current_prices([symbol])[symbol]
+        if current_price is None:
+            logger.error(f"Unable to place buy order for {symbol} due to price fetch error")
+            return None
+        
+        amount_usdt_with_fee = amount_usdt / (1 + self.FEE_RATE)
+        amount_crypto = amount_usdt_with_fee / current_price
+        fee_usdt = amount_usdt - amount_usdt_with_fee
 
-    def place_market_sell_order(self, symbol, amount_crypto):
-        order = self.trading_client.place_market_order(symbol, amount_crypto, 'sell')
-        if order:
+        if self.is_simulation:
+            order_id = f"sim_buy_{symbol}_{time.time()}"
+            self.wallet.update_account_balance("trading", "USDT", self.get_account_balance('USDT') - amount_usdt)
+            self.wallet.update_account_balance("trading", symbol.split('-')[0], self.get_account_balance(symbol.split('-')[0]) + amount_crypto)
+        else:
+            try:
+                order = self.trading_client.trade_client.create_market_order(symbol, 'buy', funds=amount_usdt)
+                order_id = order['orderId']
+                # Fetch the actual execution price
+                order_details = self.trading_client.trade_client.get_order_details(order_id)
+                current_price = float(order_details['dealFunds']) / float(order_details['dealSize'])
+                amount_crypto = float(order_details['dealSize'])
+                fee_usdt = float(order_details['fee'])
+                self.wallet.update_account_balance("trading", "USDT", self.get_account_balance('USDT') - amount_usdt)
+                self.wallet.update_account_balance("trading", symbol.split('-')[0], self.get_account_balance(symbol.split('-')[0]) + amount_crypto)
+            except Exception as e:
+                logger.error(f"Error placing buy order for {symbol}: {e}")
+                return None
+        return {'orderId': order_id, 'price': current_price, 'amount': amount_crypto, 'fee_usdt': fee_usdt}
+
+    def place_market_sell_order(self, symbol, amount_crypto, target_sell_price):
+        current_price = self.trading_client.get_current_prices([symbol])[symbol]
+        if current_price is None:
+            logger.error(f"Unable to place sell order for {symbol} due to price fetch error")
+            return None
+        
+        if current_price < target_sell_price:
+            logger.info(f"Current price ({current_price}) is below target sell price ({target_sell_price}) for {symbol}. Not selling.")
+            return None
+
+        amount_usdt = amount_crypto * current_price
+        fee_usdt = amount_usdt * self.FEE_RATE
+        amount_usdt_after_fee = amount_usdt - fee_usdt
+
+        if self.is_simulation:
+            order_id = f"sim_sell_{symbol}_{time.time()}"
+            self.wallet.update_account_balance("trading", "USDT", self.get_account_balance('USDT') + amount_usdt_after_fee)
             self.wallet.update_account_balance("trading", symbol.split('-')[0], self.get_account_balance(symbol.split('-')[0]) - amount_crypto)
-            self.wallet.update_account_balance("trading", "USDT", self.get_account_balance('USDT') + order['amount'])
-        return order
+        else:
+            try:
+                order = self.trading_client.trade_client.create_market_order(symbol, 'sell', size=amount_crypto)
+                order_id = order['orderId']
+                # Fetch the actual execution price
+                order_details = self.trading_client.trade_client.get_order_details(order_id)
+                current_price = float(order_details['dealFunds']) / float(order_details['dealSize'])
+                amount_usdt_after_fee = float(order_details['dealFunds'])
+                fee_usdt = float(order_details['fee'])
+                self.wallet.update_account_balance("trading", symbol.split('-')[0], self.get_account_balance(symbol.split('-')[0]) - amount_crypto)
+                self.wallet.update_account_balance("trading", "USDT", self.get_account_balance('USDT') + amount_usdt_after_fee)
+            except Exception as e:
+                logger.error(f"Error placing sell order for {symbol}: {e}")
+                return None
+        return {'orderId': order_id, 'price': current_price, 'amount_usdt': amount_usdt_after_fee, 'fee_usdt': fee_usdt}
 
     def display_current_status(self, current_status):
         logger.debug("Displaying current status")
@@ -325,7 +375,7 @@ class TradingBot:
                     "Value in USDT": f"{currency_data['balance'] * (currency_data['current_price'] or 0):.4f}"
                 })
             st.table(pd.DataFrame(wallet_data))
-
+            
         # Display historical data as line charts
         st.write("### Historical Data")
         for symbol in current_status['prices'].keys():
