@@ -36,11 +36,13 @@ def main():
 
     if not is_simulation:
         user_api_key = st.sidebar.text_input("Enter your personal API key:", type="password")
-        if not user_api_key:
-            st.sidebar.error("Please enter your API key to proceed.")
+        if user_api_key != st.secrets["perso_key"]:
+            st.sidebar.warning("Invalid API key. Please enter the correct key to proceed.")
+            st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided.")
+            st.sidebar.button("Start Trading", disabled=True)
             return
 
-        api_key = user_api_key
+        api_key = st.secrets["api_credentials"]["api_key"]
         api_secret = st.secrets["api_credentials"]["api_secret"]
         api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
     else:
@@ -100,7 +102,11 @@ def main():
 
     initialize_session_state()
 
-    if st.sidebar.button("Start Trading"):
+    if not is_simulation and user_api_key != st.secrets["perso_key"]:
+        st.sidebar.warning("Invalid API key. Please enter the correct key to proceed.")
+        st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided.")
+        st.sidebar.button("Start Trading", disabled=True)
+    elif st.sidebar.button("Start Trading"):
         trading_thread = threading.Thread(target=trading_loop, args=(bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade))
         trading_thread.start()
 
