@@ -41,7 +41,11 @@ def main():
 
     # Get user inputs
     if bot.trading_client.market_client is not None:
-        available_symbols = bot.trading_client.market_client.get_symbol_list()
+        try:
+            available_symbols = bot.trading_client.market_client.get_symbol_list()
+        except Exception as e:
+            st.error(f"Error fetching symbol list: {e}")
+            available_symbols = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
     else:
         available_symbols = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
     
@@ -85,24 +89,29 @@ def main():
 
         chart_creator = ChartCreator(bot)
         while True:
-            # Update chart
-            fig = chart_creator.create_time_series_chart(chosen_symbols, chart_type)
-            chart_placeholder.plotly_chart(fig, use_container_width=True)
+            try:
+                # Update chart
+                fig = chart_creator.create_time_series_chart(chosen_symbols, chart_type)
+                chart_placeholder.plotly_chart(fig, use_container_width=True)
 
-            # Update status table
-            current_status = bot.get_current_status(bot.trading_client.get_current_prices(chosen_symbols))
-            status_table_component = StatusTable(status_table, bot, chosen_symbols)
-            status_table_component.display(current_status)
+                # Update status table
+                current_prices = bot.trading_client.get_current_prices(chosen_symbols)
+                current_status = bot.get_current_status(current_prices)
+                status_table_component = StatusTable(status_table, bot, chosen_symbols)
+                status_table_component.display(current_status)
 
-            # Display trade messages
-            trade_messages_component = TradeMessages(trade_messages)
-            trade_messages_component.display()
+                # Display trade messages
+                trade_messages_component = TradeMessages(trade_messages)
+                trade_messages_component.display()
 
-            # Display error message if any
-            error_message_component = ErrorMessage(error_placeholder)
-            error_message_component.display()
+                # Display error message if any
+                error_message_component = ErrorMessage(error_placeholder)
+                error_message_component.display()
 
-            time.sleep(1)  # Update every second
+                time.sleep(1)  # Update every second
+            except Exception as e:
+                st.error(f"An error occurred in the main loop: {e}")
+                time.sleep(5)  # Wait for 5 seconds before retrying
 
 if __name__ == "__main__":
     main()
