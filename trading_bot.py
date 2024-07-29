@@ -120,10 +120,12 @@ class TradingBot:
         self.active_trades = {}
         self.PRICE_HISTORY_LENGTH = 30
         self.is_simulation = False
-        self.simulated_usdt_balance = {}
+        self.simulated_usdt_balance = {'USDT': 0}
         self.num_orders = 1
         self.FEE_RATE = 0.001
         self.status_history = []
+        self.total_trades = 0
+        self.avg_profit_per_trade = 0
 
     def initialize(self):
         self.trading_client.initialize()
@@ -226,13 +228,16 @@ class TradingBot:
 
     def get_current_status(self, prices):
         logger.debug("Getting current status")
-        current_total_usdt = self.get_account_balance('USDT')
-        for symbol, price in prices.items():
-            crypto_currency = symbol.split('-')[0]
-            if price is not None:
-                current_total_usdt += self.get_account_balance(crypto_currency) * price
-            else:
-                logger.warning(f"Skipping {symbol} in total USDT calculation due to unavailable price")
+        if self.is_simulation:
+            current_total_usdt = self.simulated_usdt_balance['USDT']
+        else:
+            current_total_usdt = self.get_account_balance('USDT')
+            for symbol, price in prices.items():
+                crypto_currency = symbol.split('-')[0]
+                if price is not None:
+                    current_total_usdt += self.get_account_balance(crypto_currency) * price
+                else:
+                    logger.warning(f"Skipping {symbol} in total USDT calculation due to unavailable price")
 
         liquid_usdt = current_total_usdt * self.usdt_liquid_percentage
         tradable_usdt = max(current_total_usdt - liquid_usdt, 0)
@@ -246,7 +251,9 @@ class TradingBot:
             'current_total_usdt': current_total_usdt,
             'tradable_usdt': tradable_usdt,
             'liquid_usdt': liquid_usdt,
-            'wallet_summary': self.wallet.get_account_summary() if self.is_simulation else None
+            'wallet_summary': self.wallet.get_account_summary() if self.is_simulation else None,
+            'total_trades': self.total_trades,
+            'avg_profit_per_trade': self.avg_profit_per_trade,
         }
         
         self.status_history.append(status)
@@ -313,6 +320,8 @@ class TradingBot:
         st.write("### Profits")
         st.write(f"Profits per Symbol: {current_status['profits']}")
         st.write(f"Total Profit: {current_status['total_profit']:.4f} USDT")
+        st.write(f"Total Trades: {current_status['total_trades']}")
+        st.write(f"Average Profit per Trade: {current_status['avg_profit_per_trade']:.4f} USDT")
 
         # Display account balances
         st.write("### Account Balances")
