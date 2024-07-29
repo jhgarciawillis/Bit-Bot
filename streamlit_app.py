@@ -34,19 +34,31 @@ def main():
         return
     is_simulation, simulated_usdt_balance = config_result
 
-    api_key = st.secrets["api_credentials"]["api_key"]
-    api_secret = st.secrets["api_credentials"]["api_secret"]
-    api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
+    if not is_simulation:
+        user_api_key = st.sidebar.text_input("Enter your personal API key:", type="password")
+        if not user_api_key:
+            st.sidebar.error("Please enter your API key to proceed.")
+            return
+
+        api_key = user_api_key
+        api_secret = st.secrets["api_credentials"]["api_secret"]
+        api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
+    else:
+        api_key = st.secrets["api_credentials"]["api_key"]
+        api_secret = st.secrets["api_credentials"]["api_secret"]
+        api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
 
     if 'bot' not in st.session_state:
         st.session_state.bot = TradingBot(api_key, api_secret, api_passphrase, API_URL)
 
     bot = st.session_state.bot
     bot.is_simulation = is_simulation
+
     if is_simulation:
         bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
+    else:
+        bot.initialize()
     
-    bot.initialize()
     total_usdt_balance = bot.get_account_balance('USDT')
     st.sidebar.write(f"{'Simulated' if is_simulation else 'Confirmed'} USDT Balance: {total_usdt_balance:.4f}")
 
