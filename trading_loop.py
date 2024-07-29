@@ -21,12 +21,11 @@ def trading_loop(bot: TradingBot, chosen_symbols, profit_margin, num_orders):
                     continue
 
                 allocated_value = bot.symbol_allocations[symbol] * tradable_usdt
-                base_currency = symbol.split('-')[0]
-                base_balance = bot.get_account_balance('USDT')  # We're always trading with USDT
+                usdt_balance = bot.get_tradable_balance('USDT')
 
                 # Check if we should buy
-                if base_balance > 0 and bot.should_buy(symbol, current_price):
-                    buy_amount_usdt = min(allocated_value, base_balance)
+                if usdt_balance > 0 and bot.should_buy(symbol, current_price):
+                    buy_amount_usdt = min(allocated_value, usdt_balance)
                     if buy_amount_usdt > 0:
                         order_amount = buy_amount_usdt / num_orders
                         for _ in range(num_orders):
@@ -45,19 +44,21 @@ def trading_loop(bot: TradingBot, chosen_symbols, profit_margin, num_orders):
 
                 # Check active trades for selling
                 for order_id, trade in list(bot.active_trades.items()):
-                    if trade['symbol'] == symbol and current_price >= trade['target_sell_price']:
-                        sell_amount_crypto = trade['amount']
-                        sell_order = bot.place_market_sell_order(symbol, sell_amount_crypto, trade['target_sell_price'])
-                        if sell_order:
-                            sell_amount_usdt = sell_order['amount_usdt']
-                            total_fee = trade['fee_usdt'] + sell_order['fee_usdt']
-                            profit = sell_amount_usdt - (trade['amount'] * trade['buy_price']) - total_fee
-                            bot.profits[symbol] += profit
-                            bot.total_profit += profit
-                            bot.total_trades += 1
-                            bot.avg_profit_per_trade = bot.total_profit / bot.total_trades
-                            st.session_state.trade_messages.append(f"Placed sell order for {symbol}: {sell_amount_usdt:.4f} USDT at {sell_order['price']:.4f}, Profit: {profit:.4f} USDT, Total Fee: {total_fee:.4f} USDT, Order ID: {sell_order['orderId']}")
-                            del bot.active_trades[order_id]
+                    if trade['symbol'] == symbol:
+                        current_price = prices[symbol]
+                        if current_price >= trade['target_sell_price']:
+                            sell_amount_crypto = trade['amount']
+                            sell_order = bot.place_limit_sell_order(symbol, sell_amount_crypto, trade['target_sell_price'])
+                            if sell_order:
+                                sell_amount_usdt = sell_order['amount_usdt']
+                                total_fee = trade['fee_usdt'] + sell_order['fee_usdt']
+                                profit = sell_amount_usdt - (trade['amount'] * trade['buy_price']) - total_fee
+                                bot.profits[symbol] = bot.profits.get(symbol, 0) + profit
+                                bot.total_profit += profit
+                                bot.total_trades += 1
+                                bot.avg_profit_per_trade = bot.total_profit / bot.total_trades
+                                st.session_state.trade_messages.append(f"Placed limit sell order for {symbol}: {sell_amount_usdt:.4f} USDT at {sell_order['price']:.4f}, Profit: {profit:.4f} USDT, Total Fee: {total_fee:.4f} USDT, Order ID: {sell_order['orderId']}")
+                                del bot.active_trades[order_id]
 
             # Update allocations based on new total USDT value
             bot.update_allocations(current_status['current_total_usdt'], bot.usdt_liquid_percentage)
