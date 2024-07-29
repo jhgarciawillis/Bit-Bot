@@ -37,17 +37,10 @@ def main():
 
     if is_simulation:
         bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
-        bot.initialize()
-        total_usdt_balance = bot.get_account_balance('USDT')
-        st.sidebar.write(f"Simulated USDT Balance: {total_usdt_balance:.4f}")
-    else:
-        bot.initialize()
-        total_usdt_balance = bot.get_account_balance('USDT')
-        if total_usdt_balance is not None:
-            st.sidebar.write(f"Confirmed USDT Balance: {total_usdt_balance:.4f}")
-        else:
-            st.sidebar.error("Unable to fetch USDT balance. Please check your API credentials and connection.")
-            return
+    
+    bot.initialize()
+    total_usdt_balance = bot.get_account_balance('USDT')
+    st.sidebar.write(f"{'Simulated' if is_simulation else 'Confirmed'} USDT Balance: {total_usdt_balance:.4f}")
 
     # Get user inputs
     if bot.trading_client.market_client is not None:
@@ -69,6 +62,15 @@ def main():
         st.warning("Please select at least one symbol to trade.")
         return
     
+    bot.usdt_liquid_percentage = st.sidebar.number_input(
+        "Enter the percentage of your assets to keep liquid in USDT (0-100%)",
+        min_value=0.0,
+        max_value=100.0,
+        value=50.0,
+        step=0.0001,
+        format="%.4f"
+    ) / 100
+
     bot.symbol_allocations, tradable_usdt_amount = bot.get_user_allocations(user_selected_symbols, total_usdt_balance)
     if tradable_usdt_amount <= 0:
         st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
