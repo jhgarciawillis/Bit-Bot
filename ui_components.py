@@ -139,3 +139,9 @@ class ErrorMessage:
         if st.session_state.error_message:
             self.error_placeholder.error(st.session_state.error_message)
             st.session_state.error_message = ""  # Clear the error message after displaying
+
+def initialize_session_state():
+    if 'trade_messages' not in st.session_state:
+        st.session_state.trade_messages = []
+    if 'error_message' not in st.session_state:
+        st.session_state.error_message = ""
