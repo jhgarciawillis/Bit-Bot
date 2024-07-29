@@ -41,6 +41,8 @@ def main():
             st.sidebar.markdown("**Start Trading** button is disabled until the correct API key is provided.")
             st.sidebar.button("Start Trading", disabled=True)
             return
+        else:
+            st.sidebar.success("API key verified. You can now start trading.")
 
         api_key = st.secrets["api_credentials"]["api_key"]
         api_secret = st.secrets["api_credentials"]["api_secret"]
