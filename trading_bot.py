@@ -131,7 +131,6 @@ class TradingBot:
         self.trading_client.initialize()
         if not self.is_simulation:
             self.update_wallet_balances()
-        self.print_total_usdt_balance()
 
     def update_wallet_balances(self):
         if self.trading_client.user_client:
@@ -144,18 +143,14 @@ class TradingBot:
             except Exception as e:
                 logger.error(f"Error updating wallet balances: {e}")
 
-    def print_total_usdt_balance(self):
-        total_usdt = self.get_account_balance('USDT')
-        logger.info(f"Total USDT Balance in trading account: {total_usdt:.4f}")
-        st.sidebar.write(f"Total USDT Balance: {total_usdt:.4f}")
-
-    def get_user_symbol_choices(self, available_symbols):
-        logger.debug("Getting user symbol choices")
-        return st.sidebar.multiselect("Select Symbols to Trade", available_symbols)
-
     def get_account_balance(self, currency='USDT'):
         logger.debug(f"Getting account balance for {currency}")
-        return self.wallet.get_account("trading").get_currency_balance(currency)
+        balance = self.wallet.get_account("trading").get_currency_balance(currency)
+        if balance is not None:
+            logger.info(f"Total {currency} Balance in trading account: {balance:.4f}")
+        else:
+            logger.warning(f"Balance for {currency} is not available")
+        return balance
 
     def get_user_allocations(self, user_selected_symbols, total_usdt_balance):
         logger.debug("Getting user allocations")
@@ -316,7 +311,7 @@ class TradingBot:
         st.write(f"Current Total USDT: {current_status['current_total_usdt']:.4f}")
         st.write(f"Tradable USDT: {current_status['tradable_usdt']:.4f}")
         st.write(f"Liquid USDT (not to be traded): {current_status['liquid_usdt']:.4f}")
-          
+
         # Display wallet summary
         st.write("### Wallet Summary")
         for account_type, account_data in current_status['wallet_summary'].items():
