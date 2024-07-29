@@ -108,6 +108,9 @@ class TradingClient:
         }
 
 class TradingBot:
+    FEE_RATE = 0.001
+    is_simulation = False
+
     def __init__(self, api_key, api_secret, api_passphrase, api_url):
         self.trading_client = TradingClient(api_key, api_secret, api_passphrase, api_url)
         self.wallet = Wallet()
@@ -119,9 +122,7 @@ class TradingBot:
         self.price_history = {}
         self.active_trades = {}
         self.PRICE_HISTORY_LENGTH = 30
-        self.is_simulation = False
         self.num_orders = 1
-        self.FEE_RATE = 0.001
         self.status_history = []
         self.total_trades = 0
         self.avg_profit_per_trade = 0
@@ -130,13 +131,23 @@ class TradingBot:
         self.trading_client.initialize()
         if not self.is_simulation:
             self.update_wallet_balances()
+        self.print_total_usdt_balance()
 
     def update_wallet_balances(self):
         if self.trading_client.user_client:
-            accounts = self.trading_client.user_client.get_account_list()
-            for account in accounts:
-                if account['type'] == 'trade':
-                    self.wallet.update_account_balance("trading", account['currency'], float(account['available']))
+            try:
+                accounts = self.trading_client.user_client.get_account_list()
+                for account in accounts:
+                    if account['type'] == 'trade':
+                        self.wallet.update_account_balance("trading", account['currency'], float(account['available']))
+                logger.info(f"Updated wallet balances: {self.wallet.get_account_summary()}")
+            except Exception as e:
+                logger.error(f"Error updating wallet balances: {e}")
+
+    def print_total_usdt_balance(self):
+        total_usdt = self.get_account_balance('USDT')
+        logger.info(f"Total USDT Balance in trading account: {total_usdt:.4f}")
+        st.sidebar.write(f"Total USDT Balance: {total_usdt:.4f}")
 
     def get_user_symbol_choices(self, available_symbols):
         logger.debug("Getting user symbol choices")
@@ -145,10 +156,6 @@ class TradingBot:
     def get_account_balance(self, currency='USDT'):
         logger.debug(f"Getting account balance for {currency}")
         return self.wallet.get_account("trading").get_currency_balance(currency)
-
-    def print_total_usdt_balance(self):
-        total_usdt = self.get_account_balance('USDT')
-        st.sidebar.write(f"Total USDT Balance: {total_usdt:.4f}")
 
     def get_user_allocations(self, symbols, total_usdt):
         logger.debug("Getting user allocations")
@@ -246,13 +253,15 @@ class TradingBot:
     def place_market_buy_order(self, symbol, amount_usdt):
         order = self.trading_client.place_market_order(symbol, amount_usdt, 'buy')
         if order:
-            self.wallet.simulate_market_buy("trading", symbol.split('-')[0], amount_usdt, order['price'])
+            self.wallet.update_account_balance("trading", "USDT", self.get_account_balance('USDT') - amount_usdt)
+            self.wallet.update_account_balance("trading", symbol.split('-')[0], self.get_account_balance(symbol.split('-')[0]) + order['amount'])
         return order
 
     def place_market_sell_order(self, symbol, amount_crypto):
         order = self.trading_client.place_market_order(symbol, amount_crypto, 'sell')
         if order:
-            self.wallet.simulate_market_sell("trading", symbol.split('-')[0], amount_crypto, order['price'])
+            self.wallet.update_account_balance("trading", symbol.split('-')[0], self.get_account_balance(symbol.split('-')[0]) - amount_crypto)
+            self.wallet.update_account_balance("trading", "USDT", self.get_account_balance('USDT') + order['amount'])
         return order
 
     def display_current_status(self, current_status):
