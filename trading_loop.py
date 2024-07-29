@@ -6,7 +6,7 @@ from trading_bot import TradingBot
 def safe_divide(numerator, denominator):
     return numerator / denominator if denominator != 0 else 0
 
-def trading_loop(bot, chosen_symbols, profit_margin, num_orders):
+def trading_loop(bot: TradingBot, chosen_symbols, profit_margin, num_orders):
     while True:
         try:
             # Fetch current prices
@@ -73,6 +73,9 @@ def trading_loop(bot, chosen_symbols, profit_margin, num_orders):
 
             # Update allocations based on new total USDT value
             bot.update_allocations(current_status['current_total_usdt'], bot.usdt_liquid_percentage)
+
+            # Display current status
+            bot.display_current_status(current_status)
 
             # Sleep for a short duration before the next iteration
             time.sleep(1)
