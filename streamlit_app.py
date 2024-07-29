@@ -98,11 +98,11 @@ def main():
         trading_thread.start()
 
         chart_creator = ChartCreator(bot)
+        charts = chart_creator.create_charts()
 
         while True:
             try:
                 with chart_container:
-                    charts = chart_creator.create_charts()
                     st.plotly_chart(charts, use_container_width=True)
 
                 with table_container:
