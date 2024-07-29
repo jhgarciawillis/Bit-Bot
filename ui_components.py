@@ -1,3 +1,5 @@
+import streamlit as st
+import pandas as pd
 from trading_bot import TradingBot
 
 def configure_sidebar():
