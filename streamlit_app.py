@@ -84,9 +84,9 @@ def main():
     ) / 100
     num_orders_per_trade = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
 
-    # Create separate containers for charts and table
-    charts_container = st.container()
-    table_container = st.container()
+    # Create containers for charts and table
+    charts_container = st.empty()
+    table_container = st.empty()
 
     trade_messages = st.empty()
     error_placeholder = st.empty()
