@@ -26,9 +26,11 @@ def main():
 
     bot = st.session_state.bot
 
-    if is_simulation:
+    if not is_simulation:
+        total_usdt = bot.get_account_balance('USDT')
+    else:
         simulated_usdt_balance = st.sidebar.number_input("Simulated USDT Balance", min_value=0.0, value=1000.0, step=0.1)
-        bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
+        total_usdt = simulated_usdt_balance
 
     # Get user inputs
     if bot.market_client is not None:
@@ -41,8 +43,6 @@ def main():
     if not chosen_symbols:
         st.warning("Please select at least one symbol to trade.")
         return
-
-    total_usdt = bot.get_account_balance('USDT')
     
     bot.symbol_allocations, tradable_usdt = bot.get_user_allocations(chosen_symbols, total_usdt)
     if tradable_usdt <= 0:
