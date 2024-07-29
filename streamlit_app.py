@@ -45,10 +45,10 @@ def main():
         api_key = st.secrets["api_credentials"]["api_key"]
         api_secret = st.secrets["api_credentials"]["api_secret"]
         api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
-        total_usdt_balance = simulated_usdt_balance
         bot = TradingBot(api_key, api_secret, api_passphrase, API_URL)
         bot.is_simulation = True
-        bot.wallet.update_account_balance("trading", "USDT", total_usdt_balance)
+        bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
+        total_usdt_balance = simulated_usdt_balance
     else:
         user_api_key = st.sidebar.text_input("Enter your personal API key:", type="password")
         if user_api_key != st.secrets.get("perso_key", ""):
@@ -103,7 +103,7 @@ def main():
 
     understand_checkbox = st.sidebar.checkbox("I understand the risks and want to proceed")
 
-    if user_api_key == st.secrets.get("perso_key", "") and understand_checkbox and api_key and api_secret and api_passphrase:
+    if (user_api_key == st.secrets.get("perso_key", "") and understand_checkbox and api_key and api_secret and api_passphrase) or is_simulation:
         if st.sidebar.button("Start Trading"):
             trading_thread = threading.Thread(target=trading_loop, args=(bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade))
             trading_thread.start()
