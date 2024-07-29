@@ -29,15 +29,17 @@ def main():
 
     bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
     if is_simulation:
-        bot.simulated_usdt_balance = simulated_usdt_balance
+        bot.is_simulation = True
+        bot.simulated_usdt_balance = {'USDT': simulated_usdt_balance}
 
     if 'bot' not in st.session_state:
         st.session_state.bot = bot
 
     if not is_simulation:
         total_usdt = bot.get_account_balance('USDT')
+        st.sidebar.write(f"Confirmed USDT Balance: {total_usdt:.2f}")
     else:
-        total_usdt = bot.simulated_usdt_balance
+        total_usdt = bot.simulated_usdt_balance['USDT']
 
     # Get user inputs
     if bot.trading_client.market_client is not None:
@@ -90,7 +92,7 @@ def main():
             chart_placeholder.plotly_chart(fig, use_container_width=True)
 
             # Update status table
-            current_status = bot.get_current_status(bot.trading_client.get_current_prices(chosen_symbols))
+            current_status = bot.get_current_status(bot.get_current_prices(chosen_symbols))
             status_table_component = StatusTable(status_table, bot, chosen_symbols)
             status_table_component.display(current_status)
 
