@@ -36,32 +36,32 @@ def main():
         st.session_state.bot = bot
 
     bot.initialize()
-    total_usdt = bot.get_account_balance('USDT')
-    st.sidebar.write(f"Confirmed USDT Balance: {total_usdt:.4f}")
+    total_usdt_balance = bot.get_account_balance('USDT')
+    st.sidebar.write(f"Confirmed USDT Balance: {total_usdt_balance:.4f}")
 
     # Get user inputs
     if bot.trading_client.market_client is not None:
         try:
-            available_symbols = bot.trading_client.market_client.get_symbol_list()
+            available_trading_symbols = bot.trading_client.market_client.get_symbol_list()
         except Exception as e:
             st.error(f"Error fetching symbol list: {e}")
-            available_symbols = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
+            available_trading_symbols = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
     else:
-        available_symbols = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
+        available_trading_symbols = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
     
-    chosen_symbols = st.sidebar.multiselect("Select Symbols to Trade", available_symbols)
+    user_selected_symbols = st.sidebar.multiselect("Select Symbols to Trade", available_trading_symbols)
 
-    if not chosen_symbols:
+    if not user_selected_symbols:
         st.warning("Please select at least one symbol to trade.")
         return
     
-    bot.symbol_allocations, tradable_usdt = bot.get_user_allocations(chosen_symbols, total_usdt)
-    if tradable_usdt <= 0:
+    bot.symbol_allocations, tradable_usdt_amount = bot.get_user_allocations(user_selected_symbols, total_usdt_balance)
+    if tradable_usdt_amount <= 0:
         st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
         return
 
     # Get user input for profit margin and number of orders
-    profit_margin = st.sidebar.number_input(
+    profit_margin_percentage = st.sidebar.number_input(
         "Profit Margin Percentage (0-100%)",
         min_value=0.0001,
         max_value=100.0,
@@ -69,10 +69,10 @@ def main():
         step=0.0001,
         format="%.4f"
     ) / 100
-    num_orders = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
+    num_orders_per_trade = st.sidebar.slider("Number of Orders", min_value=1, max_value=10, value=1, step=1)
 
     # Chart type selection
-    chart_type = st.selectbox("Select chart type", ['Price', 'Buy Prices', 'Target Sell Prices', 'Total Profits'])
+    selected_chart_type = st.selectbox("Select chart type", ['Price', 'Buy Prices', 'Target Sell Prices', 'Total Profits'])
 
     # Create placeholders for chart, status table, and error messages
     chart_placeholder = st.empty()
@@ -84,20 +84,20 @@ def main():
 
     # Main trading loop
     if st.sidebar.button("Start Trading"):
-        trading_thread = threading.Thread(target=trading_loop, args=(bot, chosen_symbols, profit_margin, num_orders))
+        trading_thread = threading.Thread(target=trading_loop, args=(bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade))
         trading_thread.start()
 
         chart_creator = ChartCreator(bot)
         while True:
             try:
                 # Update chart
-                fig = chart_creator.create_time_series_chart(chosen_symbols, chart_type)
+                fig = chart_creator.create_time_series_chart(user_selected_symbols, selected_chart_type)
                 chart_placeholder.plotly_chart(fig, use_container_width=True)
 
                 # Update status table
-                current_prices = bot.trading_client.get_current_prices(chosen_symbols)
+                current_prices = bot.trading_client.get_current_prices(user_selected_symbols)
                 current_status = bot.get_current_status(current_prices)
-                status_table_component = StatusTable(status_table, bot, chosen_symbols)
+                status_table_component = StatusTable(status_table, bot, user_selected_symbols)
                 status_table_component.display(current_status)
 
                 # Display trade messages
