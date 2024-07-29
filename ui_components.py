@@ -14,13 +14,14 @@ def configure_sidebar():
         api_secret = "simulation"
         api_passphrase = "simulation"
         api_url = "https://api.kucoin.com"  # You can use the real URL even for simulation
+        simulated_usdt_balance = st.sidebar.number_input("Simulated USDT Balance", min_value=0.0, value=1000.0, step=0.1)
     else:
         st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
         st.sidebar.warning("Only proceed if you understand the risks and are using funds you can afford to lose.")
         proceed = st.sidebar.checkbox("I understand the risks and want to proceed")
         if not proceed:
             st.sidebar.error("Please check the box to proceed with live trading.")
-            return None, None, None, None, None
+            return None, None, None, None, None, None
 
         # Use secrets for API credentials in live mode
         api_key = st.secrets["api_credentials"]["api_key"]
@@ -29,9 +30,11 @@ def configure_sidebar():
         api_url = "https://api.kucoin.com"
 
     bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
+    if is_simulation:
+        bot.simulated_usdt_balance = simulated_usdt_balance
     bot.print_total_usdt_balance()
 
-    return api_key, api_secret, api_passphrase, api_url, is_simulation
+    return api_key, api_secret, api_passphrase, api_url, is_simulation, bot
 
 def initialize_session_state():
     if 'trade_messages' not in st.session_state:
