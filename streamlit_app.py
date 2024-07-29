@@ -2,20 +2,21 @@ import streamlit as st
 import time
 import threading
 from trading_bot import TradingBot
-from chart_utils import create_time_series_chart
+from chart_utils import ChartCreator
 from trading_loop import trading_loop
 from ui_components import (
-    configure_sidebar,
-    initialize_session_state,
-    display_status_table,
-    display_trade_messages,
-    display_error_message
+    SidebarConfig,
+    StatusTable,
+    TradeMessages,
+    ErrorMessage,
+    initialize_session_state
 )
 
 def main():
     st.set_page_config(layout="wide")
     st.title("Cryptocurrency Trading Bot")
 
+    sidebar_config = SidebarConfig(TradingBot)
     (
         api_key,
         api_secret,
@@ -23,7 +24,7 @@ def main():
         api_url,
         is_simulation,
         bot
-    ) = configure_sidebar()
+    ) = sidebar_config.configure()
 
     if 'bot' not in st.session_state:
         st.session_state.bot = bot
@@ -33,12 +34,11 @@ def main():
     if not is_simulation:
         total_usdt = bot.get_account_balance('USDT')
     else:
-        simulated_usdt_balance = st.sidebar.number_input("Simulated USDT Balance", min_value=0.0, value=1000.0, step=0.1)
-        total_usdt = simulated_usdt_balance
+        total_usdt = bot.simulated_usdt_balance
 
     # Get user inputs
-    if bot.market_client is not None:
-        available_symbols = bot.market_client.get_symbol_list()
+    if bot.trading_client.market_client is not None:
+        available_symbols = bot.trading_client.market_client.get_symbol_list()
     else:
         available_symbols = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
     
@@ -80,20 +80,24 @@ def main():
         trading_thread = threading.Thread(target=trading_loop, args=(bot, chosen_symbols, profit_margin, num_orders))
         trading_thread.start()
 
+        chart_creator = ChartCreator(bot)
         while True:
             # Update chart
-            fig = create_time_series_chart(bot, chosen_symbols, chart_type)
+            fig = chart_creator.create_time_series_chart(chosen_symbols, chart_type)
             chart_placeholder.plotly_chart(fig, use_container_width=True)
 
             # Update status table
-            current_status = bot.get_current_status(bot.get_current_prices(chosen_symbols))
-            display_status_table(status_table, current_status, bot, chosen_symbols)
+            current_status = bot.get_current_status(bot.trading_client.get_current_prices(chosen_symbols))
+            status_table_component = StatusTable(status_table, bot, chosen_symbols)
+            status_table_component.display(current_status)
 
             # Display trade messages
-            display_trade_messages(trade_messages)
+            trade_messages_component = TradeMessages(trade_messages)
+            trade_messages_component.display()
 
             # Display error message if any
-            display_error_message(error_placeholder)
+            error_message_component = ErrorMessage(error_placeholder)
+            error_message_component.display()
 
             time.sleep(1)  # Update every second
 
