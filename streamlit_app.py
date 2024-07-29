@@ -46,6 +46,9 @@ def main():
         api_secret = st.secrets["api_credentials"]["api_secret"]
         api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
         total_usdt_balance = simulated_usdt_balance
+        bot = TradingBot(api_key, api_secret, api_passphrase, API_URL)
+        bot.is_simulation = True
+        bot.wallet.update_account_balance("trading", "USDT", total_usdt_balance)
     else:
         user_api_key = st.sidebar.text_input("Enter your personal API key:", type="password")
         if user_api_key != st.secrets.get("perso_key", ""):
@@ -64,10 +67,7 @@ def main():
             total_usdt_balance = bot.get_account_balance('USDT')
 
     if 'bot' not in st.session_state:
-        st.session_state.bot = TradingBot(api_key, api_secret, api_passphrase, API_URL)
-
-    bot = st.session_state.bot
-    bot.is_simulation = is_simulation
+        st.session_state.bot = bot
 
     st.sidebar.write(f"{'Simulated' if is_simulation else 'Confirmed'} USDT Balance: {total_usdt_balance:.4f}")
 
