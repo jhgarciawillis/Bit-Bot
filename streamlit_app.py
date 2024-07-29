@@ -27,11 +27,11 @@ def main():
     api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
     api_url = "https://api.kucoin.com"
 
-    bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
-    bot.is_simulation = is_simulation
-
     if 'bot' not in st.session_state:
-        st.session_state.bot = bot
+        st.session_state.bot = TradingBot(api_key, api_secret, api_passphrase, api_url)
+
+    bot = st.session_state.bot
+    bot.is_simulation = is_simulation
 
     if is_simulation:
         bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
@@ -41,14 +41,18 @@ def main():
     else:
         st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
         st.sidebar.warning("Only proceed if you understand the risks and are using funds you can afford to lose.")
-        proceed = st.sidebar.checkbox("I understand the risks and want to proceed")
+        proceed = st.sidebar.checkbox("I understand the risks and want to proceed", key="proceed_checkbox")
         if not proceed:
             st.sidebar.error("Please check the box to proceed with live trading.")
             return
         else:
             bot.initialize()
             total_usdt_balance = bot.get_account_balance('USDT')
-            st.sidebar.write(f"Confirmed USDT Balance: {total_usdt_balance:.4f}")
+            if total_usdt_balance is not None:
+                st.sidebar.write(f"Confirmed USDT Balance: {total_usdt_balance:.4f}")
+            else:
+                st.sidebar.error("Unable to fetch USDT balance. Please check your API credentials and connection.")
+                return
 
     # Get user inputs
     if bot.trading_client.market_client is not None:
