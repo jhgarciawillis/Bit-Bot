@@ -92,7 +92,7 @@ def main():
             chart_placeholder.plotly_chart(fig, use_container_width=True)
 
             # Update status table
-            current_status = bot.get_current_status(bot.get_current_prices(chosen_symbols))
+            current_status = bot.get_current_status(bot.trading_client.get_current_prices(chosen_symbols))
             status_table_component = StatusTable(status_table, bot, chosen_symbols)
             status_table_component.display(current_status)
 
