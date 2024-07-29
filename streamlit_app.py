@@ -97,15 +97,9 @@ def main():
 
         while True:
             try:
-                # Clear the previous charts
-                chart_container.empty()
-
                 # Display the updated charts
                 with chart_container.container():
                     st.plotly_chart(charts, use_container_width=True)
-
-                # Clear the previous table
-                table_container.empty()
 
                 # Display the updated table
                 with table_container.container():
