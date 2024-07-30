@@ -30,11 +30,19 @@ def simulation_sidebar():
 
 def live_trading_sidebar():
     st.sidebar.header("Live Trading Mode")
+    personal_password = st.sidebar.text_input("Enter your personal password:", type="password")
+    
+    if personal_password != st.secrets.get("perso_password", ""):
+        st.sidebar.error("Invalid password. Please enter the correct password to proceed.")
+        return None, False
+
+    st.sidebar.success("Password verified. You can now configure live trading.")
     st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
     st.sidebar.warning("Only proceed if you understand the risks and are using funds you can afford to lose.")
-    user_api_key = st.sidebar.text_input("Enter your personal API key:", type="password")
+    
     proceed = st.sidebar.checkbox("I understand the risks and want to proceed", key="proceed_checkbox")
-    return user_api_key, proceed
+    
+    return personal_password, proceed
 
 def common_sidebar_config(bot, available_trading_symbols):
     user_selected_symbols = st.sidebar.multiselect("Select Symbols to Trade", available_trading_symbols)
@@ -85,18 +93,16 @@ def main():
         total_usdt_balance = simulated_usdt_balance
         proceed = True
     else:
-        user_api_key, proceed = live_trading_sidebar()
-        if user_api_key != st.secrets.get("perso_key", ""):
-            st.sidebar.warning("Invalid API key. Please enter the correct key to proceed.")
-            proceed = False
-        else:
-            st.sidebar.success("API key verified. You can now start trading.")
-            api_key = st.secrets["api_credentials"]["api_key"]
-            api_secret = st.secrets["api_credentials"]["api_secret"]
-            api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
-            bot = TradingBot(api_key, api_secret, api_passphrase, API_URL)
-            bot.initialize()
-            total_usdt_balance = bot.get_account_balance('USDT')
+        personal_password, proceed = live_trading_sidebar()
+        if not proceed:
+            return
+
+        api_key = st.secrets["api_credentials"]["api_key"]
+        api_secret = st.secrets["api_credentials"]["api_secret"]
+        api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
+        bot = TradingBot(api_key, api_secret, api_passphrase, API_URL)
+        bot.initialize()
+        total_usdt_balance = bot.get_account_balance('USDT')
 
     if 'bot' not in st.session_state:
         st.session_state.bot = bot
@@ -142,7 +148,7 @@ def main():
                     st.error(f"An error occurred in the main loop: {e}")
                     time.sleep(5)
     else:
-        st.sidebar.warning("Please check the checkbox to proceed with live trading.")
+        st.sidebar.warning("Please enter the correct password and check the checkbox to proceed with live trading.")
         st.sidebar.button("Start Trading", disabled=True)
 
     ErrorMessage(error_placeholder).display()  # Display error message outside the loop
