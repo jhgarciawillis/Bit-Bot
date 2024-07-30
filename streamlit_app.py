@@ -1,10 +1,15 @@
 import streamlit as st
 import time
 import threading
+import logging
 from trading_bot import TradingBot
 from chart_utils import ChartCreator
 from trading_loop import trading_loop
 from ui_components import StatusTable, TradeMessages, ErrorMessage, initialize_session_state
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Hardcoded variables
 DEFAULT_TRADING_SYMBOLS = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
@@ -40,6 +45,8 @@ def live_trading_sidebar():
         return None, False
     
     correct_key = st.secrets.get("perso_key", "")
+    logger.debug(f"Entered key: {personal_key}, Correct key: {correct_key}")
+    
     if personal_key != correct_key or correct_key == "":
         st.sidebar.error("Invalid personal key. Please enter the correct key to proceed.")
         return None, False
