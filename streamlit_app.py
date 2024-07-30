@@ -30,19 +30,24 @@ def simulation_sidebar():
 
 def live_trading_sidebar():
     st.sidebar.header("Live Trading Mode")
-    personal_password = st.sidebar.text_input("Enter your personal password:", type="password")
+    personal_key = st.sidebar.text_input("Enter your personal key:", type="password")
     
-    if personal_password != st.secrets.get("perso_password", ""):
-        st.sidebar.error("Invalid password. Please enter the correct password to proceed.")
+    if personal_key == "":
+        st.sidebar.error("Personal key cannot be empty. Please enter your personal key to proceed.")
+        return None, False
+    
+    correct_key = st.secrets.get("perso_key", "")
+    if personal_key != correct_key or correct_key == "":
+        st.sidebar.error("Invalid personal key. Please enter the correct key to proceed.")
         return None, False
 
-    st.sidebar.success("Password verified. You can now configure live trading.")
+    st.sidebar.success("Personal key verified. You can now configure live trading.")
     st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
     st.sidebar.warning("Only proceed if you understand the risks and are using funds you can afford to lose.")
     
     proceed = st.sidebar.checkbox("I understand the risks and want to proceed", key="proceed_checkbox")
     
-    return personal_password, proceed
+    return personal_key, proceed
 
 def common_sidebar_config(bot, available_trading_symbols):
     user_selected_symbols = st.sidebar.multiselect("Select Symbols to Trade", available_trading_symbols)
@@ -93,7 +98,7 @@ def main():
         total_usdt_balance = simulated_usdt_balance
         proceed = True
     else:
-        personal_password, proceed = live_trading_sidebar()
+        personal_key, proceed = live_trading_sidebar()
         if not proceed:
             return
 
@@ -148,10 +153,11 @@ def main():
                     st.error(f"An error occurred in the main loop: {e}")
                     time.sleep(5)
     else:
-        st.sidebar.warning("Please enter the correct password and check the checkbox to proceed with live trading.")
+        st.sidebar.warning("Please enter the correct personal key and check the checkbox to proceed with live trading.")
         st.sidebar.button("Start Trading", disabled=True)
 
     ErrorMessage(error_placeholder).display()  # Display error message outside the loop
 
 if __name__ == "__main__":
     main()
+    
