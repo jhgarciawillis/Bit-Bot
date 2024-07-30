@@ -2,6 +2,8 @@ import streamlit as st
 import time
 import threading
 import logging
+import hmac
+import hashlib
 from trading_bot import TradingBot
 from chart_utils import ChartCreator
 from trading_loop import trading_loop
@@ -36,18 +38,25 @@ def simulation_sidebar():
     )
     return simulated_usdt_balance
 
+def secure_compare(a, b):
+    return hmac.compare_digest(a.encode(), b.encode())
+
 def live_trading_sidebar():
     st.sidebar.header("Live Trading Mode")
     personal_key = st.sidebar.text_input("Enter your personal key:", type="password")
     
-    if personal_key == "":
+    if not personal_key:
         st.sidebar.error("Personal key cannot be empty. Please enter your personal key to proceed.")
         return None, False
     
     correct_key = st.secrets.get("perso_key", "")
-    logger.debug(f"Entered key: {personal_key}, Correct key: {correct_key}")
     
-    if personal_key != correct_key or correct_key == "":
+    # Log key information (be cautious with sensitive data in production)
+    logger.debug(f"Entered key length: {len(personal_key)}, Correct key length: {len(correct_key)}")
+    logger.debug(f"Entered key hash: {hashlib.sha256(personal_key.encode()).hexdigest()}")
+    logger.debug(f"Correct key hash: {hashlib.sha256(correct_key.encode()).hexdigest()}")
+
+    if not secure_compare(personal_key, correct_key) or not correct_key:
         st.sidebar.error("Invalid personal key. Please enter the correct key to proceed.")
         return None, False
 
