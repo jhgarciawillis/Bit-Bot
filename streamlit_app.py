@@ -1,6 +1,7 @@
 import streamlit as st
 import time
 import threading
+import signal
 from trading_bot import TradingBot
 from chart_utils import ChartCreator
 from trading_loop import trading_loop
@@ -9,6 +10,9 @@ from ui_components import StatusTable, TradeMessages, ErrorMessage, initialize_s
 # Hardcoded variables
 DEFAULT_TRADING_SYMBOLS = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
 API_URL = "https://api.kucoin.com"
+
+# Global flag to control the trading loop
+stop_trading = threading.Event()
 
 def get_available_trading_symbols(market_client):
     try:
@@ -74,9 +78,16 @@ def common_sidebar_config(bot, available_trading_symbols):
 
     return user_selected_symbols, profit_margin_percentage, num_orders_per_trade
 
+def signal_handler(signum, frame):
+    stop_trading.set()
+
 def main():
     st.set_page_config(layout="wide")
     st.title("Cryptocurrency Trading Bot")
+
+    # Set up signal handler for graceful shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
 
     mode = st.radio("Select Mode", ["Simulation", "Live Trading"])
 
@@ -127,14 +138,19 @@ def main():
             st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
             return
 
-        if st.sidebar.button("Start Trading"):
-            trading_thread = threading.Thread(target=trading_loop, args=(bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade))
+        col1, col2 = st.sidebar.columns(2)
+        start_button = col1.button("Start Trading")
+        stop_button = col2.button("Stop Trading")
+
+        if start_button:
+            stop_trading.clear()
+            trading_thread = threading.Thread(target=trading_loop, args=(bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade, stop_trading))
             trading_thread.start()
 
             chart_creator = ChartCreator(bot)
             charts = chart_creator.create_charts()
 
-            while True:
+            while not stop_trading.is_set():
                 try:
                     # Display the updated charts
                     with chart_container.container():
@@ -152,6 +168,11 @@ def main():
                 except Exception as e:
                     st.error(f"An error occurred in the main loop: {e}")
                     time.sleep(5)
+
+        if stop_button:
+            stop_trading.set()
+            st.sidebar.success("Trading stopped.")
+
     else:
         st.sidebar.warning("Please enter the correct personal key and check the checkbox to proceed with live trading.")
         st.sidebar.button("Start Trading", disabled=True)
@@ -160,4 +181,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
