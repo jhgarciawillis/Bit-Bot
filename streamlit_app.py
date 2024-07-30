@@ -1,7 +1,6 @@
 import streamlit as st
 import time
 import threading
-import signal
 from trading_bot import TradingBot
 from chart_utils import ChartCreator
 from trading_loop import trading_loop
@@ -78,16 +77,9 @@ def common_sidebar_config(bot, available_trading_symbols):
 
     return user_selected_symbols, profit_margin_percentage, num_orders_per_trade
 
-def signal_handler(signum, frame):
-    stop_trading.set()
-
 def main():
     st.set_page_config(layout="wide")
     st.title("Cryptocurrency Trading Bot")
-
-    # Set up signal handler for graceful shutdown
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
 
     mode = st.radio("Select Mode", ["Simulation", "Live Trading"])
 
