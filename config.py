@@ -3,6 +3,7 @@ import logging
 from typing import Dict, List, Any
 from kucoin.client import Market, Trade, User
 import yaml
+import streamlit as st
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -26,13 +27,13 @@ def initialize_clients() -> None:
     global market_client, trade_client, user_client
 
     try:
-        API_KEY = os.environ.get('KUCOIN_API_KEY')
-        API_SECRET = os.environ.get('KUCOIN_API_SECRET')
-        API_PASSPHRASE = os.environ.get('KUCOIN_API_PASSPHRASE')
-        API_URL = os.environ.get('KUCOIN_API_URL', 'https://api.kucoin.com')
+        API_KEY = st.secrets["api_credentials"]["api_key"]
+        API_SECRET = st.secrets["api_credentials"]["api_secret"]
+        API_PASSPHRASE = st.secrets["api_credentials"]["api_passphrase"]
+        API_URL = 'https://api.kucoin.com'
 
         if not all([API_KEY, API_SECRET, API_PASSPHRASE]):
-            raise ValueError("Missing KuCoin API credentials in environment variables")
+            raise ValueError("Missing KuCoin API credentials in Streamlit secrets")
 
         market_client = Market(url=API_URL)
         trade_client = Trade(key=API_KEY, secret=API_SECRET, passphrase=API_PASSPHRASE, url=API_URL)
@@ -86,7 +87,7 @@ ERROR_CONFIG: Dict[str, int] = {
 
 def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
     """
-    Load configuration from a YAML file and environment variables.
+    Load configuration from a YAML file and Streamlit secrets.
     
     :param config_file: Path to the YAML configuration file
     :return: Dictionary containing the configuration
@@ -99,8 +100,12 @@ def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
         logger.warning(f"Configuration file {config_file} not found. Using default configuration.")
         config = {}
 
-    # Override with environment variables
-    config['api_url'] = os.environ.get('KUCOIN_API_URL', config.get('api_url', 'https://api.kucoin.com'))
+    # Override with Streamlit secrets
+    config['api_url'] = 'https://api.kucoin.com'
+    config['api_key'] = st.secrets["api_credentials"]["api_key"]
+    config['api_secret'] = st.secrets["api_credentials"]["api_secret"]
+    config['api_passphrase'] = st.secrets["api_credentials"]["api_passphrase"]
+    config['live_trading_access_key'] = st.secrets["api_credentials"]["perso_key"]
     
     # Merge with default configurations
     config['simulation_mode'] = {**SIMULATION_MODE, **config.get('simulation_mode', {})}
@@ -114,3 +119,13 @@ def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
     config['default_usdt_liquid_percentage'] = config.get('default_usdt_liquid_percentage', DEFAULT_USDT_LIQUID_PERCENTAGE)
 
     return config
+
+def verify_live_trading_access(input_key: str) -> bool:
+    """
+    Verify the live trading access key.
+    
+    :param input_key: The key input by the user
+    :return: Boolean indicating whether the key is correct
+    """
+    correct_key = st.secrets["api_credentials"]["perso_key"]
+    return input_key == correct_key
