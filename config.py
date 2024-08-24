@@ -51,7 +51,8 @@ def get_available_trading_symbols() -> List[str]:
         if market_client:
             symbol_list = market_client.get_symbol_list()
             available_symbols = [item['symbol'] for item in symbol_list if isinstance(item, dict) and 'symbol' in item and item['symbol'].endswith('-USDT')]
-            return [symbol.replace('-USDT', '') for symbol in available_symbols]
+            available_symbols = [symbol.replace('-USDT', '') for symbol in available_symbols]
+            return available_symbols
         else:
             logger.warning("Market client not initialized. Using default trading symbols.")
             return DEFAULT_TRADING_SYMBOLS
@@ -61,6 +62,24 @@ def get_available_trading_symbols() -> List[str]:
     except Exception as e:
         logger.error(f"Unexpected error fetching symbol list: {e}")
         return DEFAULT_TRADING_SYMBOLS
+
+def validate_default_trading_symbols(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and update the default trading symbols in the configuration."""
+    available_symbols = get_available_trading_symbols()
+    default_trading_symbols = config.get('default_trading_symbols', DEFAULT_TRADING_SYMBOLS)
+
+    # Check if the default trading symbols are available
+    valid_default_symbols = [symbol for symbol in default_trading_symbols if symbol in available_symbols]
+
+    # If any default symbols are not available, use the available symbols instead
+    if len(valid_default_symbols) != len(default_trading_symbols):
+        logger.warning(f"Some default trading symbols are not available: {set(default_trading_symbols) - set(available_symbols)}")
+        logger.info(f"Using available trading symbols: {valid_default_symbols}")
+        config['default_trading_symbols'] = valid_default_symbols
+    else:
+        config['default_trading_symbols'] = default_trading_symbols
+
+    return config
 
 # Configuration for simulation mode
 SIMULATION_MODE: Dict[str, Any] = {
@@ -114,10 +133,8 @@ def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
     config['bot_config'] = {**BOT_CONFIG, **config.get('bot_config', {})}
     config['error_config'] = {**ERROR_CONFIG, **config.get('error_config', {})}
     
-    config['default_trading_symbols'] = config.get('default_trading_symbols', DEFAULT_TRADING_SYMBOLS)
-    config['default_profit_margin'] = config.get('default_profit_margin', DEFAULT_PROFIT_MARGIN)
-    config['default_num_orders'] = config.get('default_num_orders', DEFAULT_NUM_ORDERS)
-    config['default_usdt_liquid_percentage'] = config.get('default_usdt_liquid_percentage', DEFAULT_USDT_LIQUID_PERCENTAGE)
+    # Validate and update the default trading symbols
+    config = validate_default_trading_symbols(config)
 
     return config
 
