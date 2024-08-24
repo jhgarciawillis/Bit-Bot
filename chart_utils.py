@@ -20,7 +20,7 @@ class ChartCreator:
         fig = make_subplots(rows=len(self.bot.symbol_allocations), cols=1, shared_xaxes=True, vertical_spacing=0.02)
 
         for i, symbol in enumerate(self.bot.symbol_allocations, start=1):
-            price_data = self.bot.price_history[symbol]
+            price_data = self.bot.price_history.get(symbol, [])
             timestamps = [entry['timestamp'] for entry in price_data]
             prices = [entry['price'] for entry in price_data]
 
