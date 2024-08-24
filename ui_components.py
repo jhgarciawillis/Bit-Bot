@@ -11,16 +11,15 @@ class SidebarConfig:
         st.sidebar.header("Configuration")
 
         is_simulation = st.sidebar.checkbox("Simulation Mode", value=self.config['simulation_mode']['enabled'])
-        simulated_usdt_balance = self.config['simulation_mode']['initial_balance']
-
         if is_simulation:
             st.sidebar.write("Running in simulation mode. No real trades will be executed.")
             simulated_usdt_balance = st.sidebar.number_input(
                 "Simulated USDT Balance",
                 min_value=0.0,
-                value=simulated_usdt_balance,
+                value=self.config['simulation_mode']['initial_balance'],
                 step=0.1
             )
+            return is_simulation, simulated_usdt_balance
         else:
             st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
             st.sidebar.warning("Only proceed if you understand the risks and are using funds you can afford to lose.")
@@ -28,8 +27,7 @@ class SidebarConfig:
             if not proceed:
                 st.sidebar.error("Please check the box to proceed with live trading.")
                 return None, None
-
-        return is_simulation, simulated_usdt_balance
+            return is_simulation, None
 
 class StatusTable:
     def __init__(self, status_table: st.delta_generator.DeltaGenerator, bot: TradingBot, chosen_symbols: List[str]):
