@@ -133,6 +133,13 @@ def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
     config['bot_config'] = {**BOT_CONFIG, **config.get('bot_config', {})}
     config['error_config'] = {**ERROR_CONFIG, **config.get('error_config', {})}
     
+    # Ensure that the default_usdt_liquid_percentage is a valid value
+    config['default_usdt_liquid_percentage'] = config.get('default_usdt_liquid_percentage', DEFAULT_USDT_LIQUID_PERCENTAGE)
+    if config['default_usdt_liquid_percentage'] < 0 or config['default_usdt_liquid_percentage'] > 1:
+        logger.warning(f"Invalid value for default_usdt_liquid_percentage: {config['default_usdt_liquid_percentage']}")
+        config['default_usdt_liquid_percentage'] = DEFAULT_USDT_LIQUID_PERCENTAGE
+        logger.info(f"Using default value for default_usdt_liquid_percentage: {DEFAULT_USDT_LIQUID_PERCENTAGE}")
+
     # Validate and update the default trading symbols
     config = validate_default_trading_symbols(config)
 
