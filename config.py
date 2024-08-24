@@ -147,6 +147,13 @@ def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
         config['default_profit_margin'] = DEFAULT_PROFIT_MARGIN
         logger.info(f"Using default value for default_profit_margin: {DEFAULT_PROFIT_MARGIN}")
 
+    # Ensure that the default_num_orders is a valid value
+    config['default_num_orders'] = config.get('default_num_orders', DEFAULT_NUM_ORDERS)
+    if config['default_num_orders'] < 1 or config['default_num_orders'] > 10:
+        logger.warning(f"Invalid value for default_num_orders: {config['default_num_orders']}")
+        config['default_num_orders'] = DEFAULT_NUM_ORDERS
+        logger.info(f"Using default value for default_num_orders: {DEFAULT_NUM_ORDERS}")
+
     # Validate and update the default trading symbols
     config = validate_default_trading_symbols(config)
 
