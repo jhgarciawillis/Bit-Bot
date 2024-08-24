@@ -106,10 +106,11 @@ def main():
 
                 while not stop_event.is_set():
                     try:
-                        # Create and display the updated chart
+                        # Create and display the updated charts
                         with chart_container.container():
-                            price_buy_target_profit_chart = chart_creator.create_charts()
-                            st.plotly_chart(price_buy_target_profit_chart, use_container_width=True)
+                            charts = chart_creator.create_charts()
+                            st.plotly_chart(charts['price_buy_target'], use_container_width=True)
+                            st.plotly_chart(charts['total_profit'], use_container_width=True)
 
                         # Display the updated table
                         with table_container.container():
