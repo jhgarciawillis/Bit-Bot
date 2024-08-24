@@ -25,19 +25,21 @@ def trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: floa
             current_status = bot.run_trading_iteration(chosen_symbols, profit_margin, num_orders)
             
             # Update session state with new trade messages
-            for symbol, profit in current_status['profits'].items():
-                if profit > 0:
-                    st.session_state.trade_messages.append(f"Profit realized for {symbol}: {profit:.4f} USDT")
-            
-            # Keep only the last 10 trade messages
-            st.session_state.trade_messages = st.session_state.trade_messages[-10:]
+            if 'trade_messages' in st.session_state:
+                for symbol, profit in current_status['profits'].items():
+                    if profit > 0:
+                        st.session_state.trade_messages.append(f"Profit realized for {symbol}: {profit:.4f} USDT")
+                
+                # Keep only the last 10 trade messages
+                st.session_state.trade_messages = st.session_state.trade_messages[-10:]
             
             # Sleep for the configured update interval
             time.sleep(config['bot_config']['update_interval'])
             
         except Exception as e:
             logger.error(f"An error occurred in the trading loop: {str(e)}")
-            st.session_state.error_message = f"An error occurred: {str(e)}"
+            if 'error_message' in st.session_state:
+                st.session_state.error_message = f"An error occurred: {str(e)}"
             
             # Sleep for the configured retry delay before next iteration
             time.sleep(config['error_config']['retry_delay'])
@@ -55,7 +57,8 @@ def initialize_trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_m
     stop_event = threading.Event()
     trading_thread = threading.Thread(
         target=trading_loop,
-        args=(bot, chosen_symbols, profit_margin, num_orders, stop_event)
+        args=(bot, chosen_symbols, profit_margin, num_orders, stop_event),
+        daemon=True
     )
     trading_thread.start()
     return stop_event, trading_thread
@@ -68,8 +71,11 @@ def stop_trading_loop(stop_event: threading.Event, trading_thread: threading.Thr
     :param trading_thread: The trading thread to stop
     """
     stop_event.set()
-    trading_thread.join()
-    logger.info("Trading loop stopped")
+    trading_thread.join(timeout=10)  # Wait for up to 10 seconds for the thread to finish
+    if trading_thread.is_alive():
+        logger.warning("Trading thread did not stop within the timeout period.")
+    else:
+        logger.info("Trading loop stopped successfully.")
 
 def handle_trading_errors(func):
     """
@@ -83,7 +89,8 @@ def handle_trading_errors(func):
             return func(*args, **kwargs)
         except Exception as e:
             logger.error(f"Error in {func.__name__}: {str(e)}")
-            st.session_state.error_message = f"An error occurred in {func.__name__}: {str(e)}"
+            if 'error_message' in st.session_state:
+                st.session_state.error_message = f"An error occurred in {func.__name__}: {str(e)}"
     return wrapper
 
 @handle_trading_errors
