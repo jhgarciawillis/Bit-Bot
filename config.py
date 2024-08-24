@@ -140,6 +140,13 @@ def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
         config['default_usdt_liquid_percentage'] = DEFAULT_USDT_LIQUID_PERCENTAGE
         logger.info(f"Using default value for default_usdt_liquid_percentage: {DEFAULT_USDT_LIQUID_PERCENTAGE}")
 
+    # Ensure that the default_profit_margin is a valid value
+    config['default_profit_margin'] = config.get('default_profit_margin', DEFAULT_PROFIT_MARGIN)
+    if config['default_profit_margin'] < 0 or config['default_profit_margin'] > 1:
+        logger.warning(f"Invalid value for default_profit_margin: {config['default_profit_margin']}")
+        config['default_profit_margin'] = DEFAULT_PROFIT_MARGIN
+        logger.info(f"Using default value for default_profit_margin: {DEFAULT_PROFIT_MARGIN}")
+
     # Validate and update the default trading symbols
     config = validate_default_trading_symbols(config)
 
