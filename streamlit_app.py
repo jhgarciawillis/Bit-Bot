@@ -79,6 +79,9 @@ def main():
             trading_params = TradingParameters(config)
             usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade = trading_params.display()
 
+            # Inform users about the total fees and suggest a higher profit margin
+            st.sidebar.info("Please note that the total fees for buying and selling are 0.2%. It is recommended to set a profit margin higher than 0.2% to cover the fees.")
+
             # Save user inputs
             st.session_state.user_inputs = {
                 'user_selected_symbols': user_selected_symbols,
