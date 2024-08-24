@@ -73,10 +73,6 @@ def main():
                 display_trading_account_balance(bot)
 
             available_symbols = get_available_trading_symbols()
-            if not available_symbols:
-                st.warning("No available trading symbols found. Please check your KuCoin API connection.")
-                return
-            
             symbol_selector = SymbolSelector(available_symbols, config['default_trading_symbols'])
             user_selected_symbols = symbol_selector.display()
 
