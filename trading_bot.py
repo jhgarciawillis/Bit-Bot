@@ -257,7 +257,7 @@ class TradingBot:
                 for order_id, trade in list(self.active_trades.items()):
                     if trade['symbol'] == symbol:
                         target_sell_price = trade['buy_price'] * (1 + profit_margin)
-                        if current_price >= target_sell_price:
+                        if current_price is not None and current_price >= target_sell_price:
                             sell_amount_crypto = trade['amount']
                             sell_order = self.place_sell_order(symbol, sell_amount_crypto, target_sell_price)
                             if sell_order:
