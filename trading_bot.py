@@ -3,7 +3,6 @@ import logging
 from datetime import datetime
 from collections import deque
 from statistics import mean, stdev
-import random
 from typing import Dict, List, Optional, Tuple
 from wallet import Wallet, Account, Currency
 from config import load_config
@@ -149,7 +148,7 @@ class TradingBot:
                     'timestamp': datetime.now(),
                     'price': prices[symbol]
                 })
-                self.wallet.update_currency_price("trading", symbol.split('-')[0], prices[symbol])
+                self.wallet.update_currency_price("trading", symbol, prices[symbol])
 
     def should_buy(self, symbol: str, current_price: float) -> Optional[float]:
         if current_price is None or len(self.price_history[symbol]) < self.PRICE_HISTORY_LENGTH:
@@ -185,7 +184,7 @@ class TradingBot:
         return None
 
     def get_current_status(self, prices: Dict[str, float]) -> Dict:
-        current_total_usdt = self.wallet.get_total_balance_in_usdt(lambda symbol: prices.get(symbol.split('-')[0] + '-USDT'))
+        current_total_usdt = self.wallet.get_total_balance_in_usdt(lambda symbol: prices.get(symbol))
         liquid_usdt = current_total_usdt * self.usdt_liquid_percentage
         tradable_usdt = max(current_total_usdt - liquid_usdt, 0)
         
