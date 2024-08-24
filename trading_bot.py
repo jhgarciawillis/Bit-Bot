@@ -244,7 +244,7 @@ class TradingBot:
 
                 # Check if we should buy
                 limit_buy_price = self.should_buy(symbol, current_price)
-                if usdt_balance > 0 and limit_buy_price is not None:
+                if limit_buy_price is not None and usdt_balance > 0:
                     buy_amount_usdt = min(allocated_value, usdt_balance)
                     if buy_amount_usdt > 0:
                         order_amount = buy_amount_usdt / num_orders
