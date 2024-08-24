@@ -159,7 +159,7 @@ class TradingBot:
         price_mean = mean(prices)
         price_stdev = stdev(prices) if len(set(prices)) > 1 else 0
         
-        if current_price < price_mean and (price_mean - current_price) < price_stdev:
+        if current_price is not None and current_price < price_mean and (price_mean - current_price) < price_stdev:
             return price_mean
         
         return None
