@@ -50,7 +50,8 @@ def get_available_trading_symbols() -> List[str]:
     try:
         if market_client:
             symbol_list = market_client.get_symbol_list()
-            return [item['symbol'] for item in symbol_list if isinstance(item, dict) and 'symbol' in item and item['symbol'].endswith('-USDT')]
+            available_symbols = [item['symbol'] for item in symbol_list if isinstance(item, dict) and 'symbol' in item and item['symbol'].endswith('-USDT')]
+            return [symbol.replace('-USDT', '') for symbol in available_symbols]
         else:
             logger.warning("Market client not initialized. Using default trading symbols.")
             return DEFAULT_TRADING_SYMBOLS
