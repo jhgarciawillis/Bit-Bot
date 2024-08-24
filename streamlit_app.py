@@ -51,6 +51,10 @@ def main():
     initialize_session_state()
     if 'is_trading' not in st.session_state:
         st.session_state.is_trading = False
+    if 'stop_event' not in st.session_state:
+        st.session_state.stop_event = None
+    if 'trading_thread' not in st.session_state:
+        st.session_state.trading_thread = None
 
     # Sidebar configuration
     sidebar_config = SidebarConfig(config)
@@ -100,38 +104,37 @@ def main():
             error_placeholder = st.empty()
 
             # Trading loop
-            if start_button:
+            if start_button and not st.session_state.is_trading:
                 st.session_state.is_trading = True
-                stop_event, trading_thread = initialize_trading_loop(bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade)
+                st.session_state.stop_event, st.session_state.trading_thread = initialize_trading_loop(bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade)
 
+            if st.session_state.is_trading:
                 chart_creator = ChartCreator(bot)
+                try:
+                    # Create and display the updated charts
+                    with chart_container.container():
+                        charts = chart_creator.create_charts()
+                        st.plotly_chart(charts['price_buy_target'], use_container_width=True)
+                        st.plotly_chart(charts['total_profit'], use_container_width=True)
 
-                while st.session_state.is_trading:
-                    try:
-                        # Create and display the updated charts
-                        with chart_container.container():
-                            charts = chart_creator.create_charts()
-                            st.plotly_chart(charts['price_buy_target'], use_container_width=True)
-                            st.plotly_chart(charts['total_profit'], use_container_width=True)
+                    # Display the updated table
+                    with table_container.container():
+                        current_prices = bot.trading_client.get_current_prices(user_selected_symbols)
+                        current_status = bot.get_current_status(current_prices)
+                        StatusTable(table_container, bot, user_selected_symbols).display(current_status)
 
-                        # Display the updated table
-                        with table_container.container():
-                            current_prices = bot.trading_client.get_current_prices(user_selected_symbols)
-                            current_status = bot.get_current_status(current_prices)
-                            StatusTable(table_container, bot, user_selected_symbols).display(current_status)
+                    TradeMessages(trade_messages).display()
 
-                        TradeMessages(trade_messages).display()
+                except Exception as e:
+                    logger.error(f"An error occurred in the main loop: {e}")
+                    st.error(f"An error occurred: {e}")
 
-                        time.sleep(config['chart_config']['update_interval'])
-                    except Exception as e:
-                        logger.error(f"An error occurred in the main loop: {e}")
-                        st.error(f"An error occurred: {e}")
-                        time.sleep(config['error_config']['retry_delay'])
-
-            if stop_button or not st.session_state.is_trading:
+            if stop_button or (not st.session_state.is_trading and st.session_state.stop_event):
                 st.session_state.is_trading = False
-                if 'stop_event' in locals() and 'trading_thread' in locals():
-                    stop_trading_loop(stop_event, trading_thread)
+                if st.session_state.stop_event and st.session_state.trading_thread:
+                    stop_trading_loop(st.session_state.stop_event, st.session_state.trading_thread)
+                    st.session_state.stop_event = None
+                    st.session_state.trading_thread = None
                 st.sidebar.success("Trading stopped.")
                 # Clear the chart and table containers
                 chart_container.empty()
