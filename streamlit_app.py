@@ -80,6 +80,10 @@ def main():
             symbol_selector = SymbolSelector(available_symbols, config['default_trading_symbols'])
             user_selected_symbols = symbol_selector.display()
 
+            if not user_selected_symbols:
+                st.warning("Please select at least one symbol to trade.")
+                return
+
             trading_params = TradingParameters(config)
             usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade = trading_params.display()
 
@@ -95,10 +99,6 @@ def main():
             }
 
             bot.usdt_liquid_percentage = usdt_liquid_percentage
-
-            if not user_selected_symbols:
-                st.warning("Please select at least one symbol to trade.")
-                return
 
             bot.symbol_allocations, tradable_usdt_amount = bot.get_user_allocations(user_selected_symbols, bot.get_account_balance('USDT'))
             if tradable_usdt_amount <= 0:
