@@ -27,24 +27,34 @@ class PriceBuyTargetProfitChart:
     def create_chart(self) -> go.Figure:
         fig = go.Figure()
 
+        max_price = 0
         for symbol in self.bot.symbol_allocations.keys():
-            self._add_price_data(fig, symbol)
-            self._add_buy_price_data(fig, symbol)
-            self._add_target_sell_price_data(fig, symbol)
+            price_data = self._get_price_data(symbol)
+            buy_data = self._get_buy_price_data(symbol)
+            target_sell_data = self._get_target_sell_price_data(symbol)
+
+            max_price = max(max_price, 
+                            price_data['current_price'].max() if not price_data.empty else 0,
+                            buy_data['buy_price'].max() if not buy_data.empty else 0,
+                            target_sell_data['target_sell_price'].max() if not target_sell_data.empty else 0)
+
+            self._add_price_data(fig, symbol, price_data)
+            self._add_buy_price_data(fig, symbol, buy_data)
+            self._add_target_sell_price_data(fig, symbol, target_sell_data)
 
         fig.update_layout(
             title_text=self.config.CHART_TITLE,
             height=self.config.CHART_HEIGHT,
             xaxis_title="Time",
             yaxis_title="Price (USDT)",
+            yaxis=dict(range=[0, max_price * 1.1]),  # Set y-axis range with 10% margin
             legend_title="Legend",
             hovermode="x unified"
         )
 
         return fig
 
-    def _add_price_data(self, fig: go.Figure, symbol: str) -> None:
-        price_data = self._get_price_data(symbol)
+    def _add_price_data(self, fig: go.Figure, symbol: str, price_data: pd.DataFrame) -> None:
         fig.add_trace(go.Scatter(
             x=price_data['timestamp'],
             y=price_data['current_price'],
@@ -53,8 +63,7 @@ class PriceBuyTargetProfitChart:
             line=dict(color=self.config.COLORS['current_price'])
         ))
 
-    def _add_buy_price_data(self, fig: go.Figure, symbol: str) -> None:
-        buy_data = self._get_buy_price_data(symbol)
+    def _add_buy_price_data(self, fig: go.Figure, symbol: str, buy_data: pd.DataFrame) -> None:
         fig.add_trace(go.Scatter(
             x=buy_data['timestamp'],
             y=buy_data['buy_price'],
@@ -63,8 +72,7 @@ class PriceBuyTargetProfitChart:
             marker=dict(color=self.config.COLORS['buy_price'], symbol='triangle-up', size=10)
         ))
 
-    def _add_target_sell_price_data(self, fig: go.Figure, symbol: str) -> None:
-        target_sell_data = self._get_target_sell_price_data(symbol)
+    def _add_target_sell_price_data(self, fig: go.Figure, symbol: str, target_sell_data: pd.DataFrame) -> None:
         fig.add_trace(go.Scatter(
             x=target_sell_data['timestamp'],
             y=target_sell_data['target_sell_price'],
