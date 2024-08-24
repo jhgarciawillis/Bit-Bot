@@ -103,17 +103,16 @@ def update_trading_status(bot: TradingBot, chosen_symbols: List[str]) -> None:
     """
     current_prices = bot.trading_client.get_current_prices(chosen_symbols)
     current_status = bot.get_current_status(current_prices)
-    
+
     # Update Streamlit display with current status
     st.write("Current Trading Status:")
     st.write(f"Total Profit: {current_status['total_profit']:.4f} USDT")
     st.write(f"Active Trades: {len(current_status['active_trades'])}")
     st.write(f"Total Trades: {current_status['total_trades']}")
     
-    # Display current prices
-    st.write("Current Prices:")
-    for symbol, price in current_prices.items():
-        st.write(f"{symbol}: {price:.4f} USDT")
+    # Display current prices in a table
+    price_data = [[symbol, f"{price:.4f} USDT"] for symbol, price in current_prices.items()]
+    st.table(price_data)
 
 def main_trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: float, num_orders: int) -> None:
     """
