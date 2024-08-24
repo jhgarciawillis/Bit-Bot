@@ -49,6 +49,8 @@ def main():
 
     # Initialize session state
     initialize_session_state()
+    if 'is_trading' not in st.session_state:
+        st.session_state.is_trading = False
 
     # Sidebar configuration
     sidebar_config = SidebarConfig(config)
@@ -99,12 +101,12 @@ def main():
 
             # Trading loop
             if start_button:
+                st.session_state.is_trading = True
                 stop_event, trading_thread = initialize_trading_loop(bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade)
 
                 chart_creator = ChartCreator(bot)
-                start_time = datetime.now()
 
-                while not stop_event.is_set():
+                while st.session_state.is_trading:
                     try:
                         # Create and display the updated charts
                         with chart_container.container():
@@ -126,10 +128,14 @@ def main():
                         st.error(f"An error occurred: {e}")
                         time.sleep(config['error_config']['retry_delay'])
 
-            if stop_button:
+            if stop_button or not st.session_state.is_trading:
+                st.session_state.is_trading = False
                 if 'stop_event' in locals() and 'trading_thread' in locals():
                     stop_trading_loop(stop_event, trading_thread)
                 st.sidebar.success("Trading stopped.")
+                # Clear the chart and table containers
+                chart_container.empty()
+                table_container.empty()
 
         except Exception as e:
             logger.error(f"An error occurred during bot initialization: {e}")
