@@ -233,40 +233,46 @@ class TradingBot:
         tradable_usdt = current_status['tradable_usdt']
 
         for symbol in symbols:
-            current_price = prices[symbol]
-            if current_price is None:
-                logger.warning(f"Skipping {symbol} due to unavailable price data")
-                continue
+            try:
+                current_price = prices[symbol]
+                if current_price is None:
+                    logger.warning(f"Skipping {symbol} due to unavailable price data")
+                    continue
 
-            allocated_value = self.symbol_allocations[symbol] * tradable_usdt
-            usdt_balance = self.get_tradable_balance('USDT')
+                allocated_value = self.symbol_allocations.get(symbol, 0) * tradable_usdt
+                usdt_balance = self.get_tradable_balance('USDT')
 
-            # Check if we should buy
-            limit_buy_price = self.should_buy(symbol, current_price)
-            if usdt_balance > 0 and limit_buy_price is not None:
-                buy_amount_usdt = min(allocated_value, usdt_balance)
-                if buy_amount_usdt > 0:
-                    order_amount = buy_amount_usdt / num_orders
-                    for _ in range(num_orders):
-                        order = self.place_buy_order(symbol, order_amount, limit_buy_price)
-                        if order:
-                            logger.info(f"Placed buy order for {symbol}: {order_amount:.4f} USDT at {limit_buy_price:.4f}")
+                # Check if we should buy
+                limit_buy_price = self.should_buy(symbol, current_price)
+                if usdt_balance > 0 and limit_buy_price is not None:
+                    buy_amount_usdt = min(allocated_value, usdt_balance)
+                    if buy_amount_usdt > 0:
+                        order_amount = buy_amount_usdt / num_orders
+                        for _ in range(num_orders):
+                            order = self.place_buy_order(symbol, order_amount, limit_buy_price)
+                            if order:
+                                logger.info(f"Placed buy order for {symbol}: {order_amount:.4f} USDT at {limit_buy_price:.4f}")
 
-            # Check active trades for selling
-            for order_id, trade in list(self.active_trades.items()):
-                if trade['symbol'] == symbol:
-                    target_sell_price = trade['buy_price'] * (1 + profit_margin)
-                    if current_price >= target_sell_price:
-                        sell_amount_crypto = trade['amount']
-                        sell_order = self.place_sell_order(symbol, sell_amount_crypto, target_sell_price)
-                        if sell_order:
-                            profit = (target_sell_price - trade['buy_price']) * sell_amount_crypto - trade['fee'] - float(sell_order['fee'])
-                            self.profits[symbol] = self.profits.get(symbol, 0) + profit
-                            self.total_profit += profit
-                            self.total_trades += 1
-                            self.avg_profit_per_trade = self.total_profit / self.total_trades
-                            logger.info(f"Sold {symbol}: {sell_amount_crypto:.8f} at {target_sell_price:.4f}, Profit: {profit:.4f} USDT")
-                            del self.active_trades[order_id]
+                # Check active trades for selling
+                for order_id, trade in list(self.active_trades.items()):
+                    if trade['symbol'] == symbol:
+                        target_sell_price = trade['buy_price'] * (1 + profit_margin)
+                        if current_price >= target_sell_price:
+                            sell_amount_crypto = trade['amount']
+                            sell_order = self.place_sell_order(symbol, sell_amount_crypto, target_sell_price)
+                            if sell_order:
+                                profit = (target_sell_price - trade['buy_price']) * sell_amount_crypto - trade['fee'] - float(sell_order['fee'])
+                                self.profits[symbol] = self.profits.get(symbol, 0) + profit
+                                self.total_profit += profit
+                                self.total_trades += 1
+                                self.avg_profit_per_trade = self.total_profit / self.total_trades
+                                logger.info(f"Sold {symbol}: {sell_amount_crypto:.8f} at {target_sell_price:.4f}, Profit: {profit:.4f} USDT")
+                                del self.active_trades[order_id]
+
+            except KeyError as e:
+                logger.error(f"Error accessing key {str(e)} for symbol {symbol}")
+            except Exception as e:
+                logger.error(f"An error occurred while processing symbol {symbol}: {str(e)}")
 
         # Update allocations based on new total USDT value
         self.update_allocations(current_status['current_total_usdt'], self.usdt_liquid_percentage)
