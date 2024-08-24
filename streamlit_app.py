@@ -2,14 +2,13 @@ import streamlit as st
 import time
 import threading
 import logging
-import os
 from datetime import datetime
 from typing import Dict, Any
 from trading_bot import TradingBot
 from chart_utils import ChartCreator
 from trading_loop import initialize_trading_loop, stop_trading_loop
 from ui_components import StatusTable, TradeMessages, ErrorMessage, initialize_session_state, SidebarConfig, SymbolSelector, TradingParameters, TradingControls
-from config import load_config, initialize_clients, get_available_trading_symbols
+from config import load_config, initialize_clients, get_available_trading_symbols, verify_live_trading_access
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -24,12 +23,9 @@ def initialize_bot(config: Dict[str, Any], is_simulation: bool, simulated_usdt_b
     :param simulated_usdt_balance: Simulated USDT balance for simulation mode
     :return: Initialized TradingBot instance
     """
-    api_key = os.environ.get('KUCOIN_API_KEY')
-    api_secret = os.environ.get('KUCOIN_API_SECRET')
-    api_passphrase = os.environ.get('KUCOIN_API_PASSPHRASE')
-    
-    if not all([api_key, api_secret, api_passphrase]):
-        raise ValueError("Missing KuCoin API credentials in environment variables")
+    api_key = config['api_key']
+    api_secret = config['api_secret']
+    api_passphrase = config['api_passphrase']
     
     bot = TradingBot(api_key, api_secret, api_passphrase, config['bot_config']['update_interval'])
     bot.is_simulation = is_simulation
@@ -60,6 +56,13 @@ def main():
 
     if is_simulation is not None:
         try:
+            # Live trading access check
+            if not is_simulation:
+                live_trading_key = st.sidebar.text_input("Enter live trading access key", type="password")
+                if not verify_live_trading_access(live_trading_key):
+                    st.sidebar.error("Invalid live trading access key. Please try again.")
+                    return
+
             # Initialize bot
             bot = initialize_bot(config, is_simulation, simulated_usdt_balance)
 
