@@ -9,6 +9,7 @@ from chart_utils import ChartCreator
 from trading_loop import initialize_trading_loop, stop_trading_loop
 from ui_components import StatusTable, TradeMessages, ErrorMessage, initialize_session_state, SidebarConfig, SymbolSelector, TradingParameters, TradingControls
 from config import load_config, initialize_clients, get_available_trading_symbols, verify_live_trading_access
+from wallet import Wallet
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -32,6 +33,10 @@ def initialize_bot(config: Dict[str, Any], is_simulation: bool, simulated_usdt_b
 def save_chart(fig, filename):
     fig.write_image(filename)
     st.success(f"Chart saved as {filename}")
+
+def display_trading_account_balance(bot: TradingBot):
+    trading_account_balance = bot.get_account_balance('USDT')
+    st.sidebar.info(f"Trading Account Balance: {trading_account_balance:.2f} USDT")
 
 def main():
     st.set_page_config(layout="wide")
@@ -60,8 +65,12 @@ def main():
                 if not verify_live_trading_access(live_trading_key):
                     st.sidebar.error("Invalid live trading access key. Please try again.")
                     return
-
-            bot = initialize_bot(config, is_simulation, simulated_usdt_balance)
+                else:
+                    bot = initialize_bot(config, is_simulation, simulated_usdt_balance)
+                    display_trading_account_balance(bot)
+            else:
+                bot = initialize_bot(config, is_simulation, simulated_usdt_balance)
+                display_trading_account_balance(bot)
 
             available_symbols = get_available_trading_symbols()
             symbol_selector = SymbolSelector(available_symbols, config['default_trading_symbols'])
@@ -88,6 +97,8 @@ def main():
             if tradable_usdt_amount <= 0:
                 st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
                 return
+
+            st.sidebar.info(f"Tradable USDT Amount: {tradable_usdt_amount:.2f}")
 
             trading_controls = TradingControls(config)
             start_button, stop_button = trading_controls.display()
