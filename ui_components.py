@@ -108,11 +108,11 @@ class TradeMessages:
         self.trade_messages.text("\n".join(st.session_state.trade_messages[-10:]))  # Display last 10 messages
 
 class ErrorMessage:
-    def __init__(self, error_placeholder: st.delta_generator.DeltaGenerator):
+    def __init__(self, error_placeholder: st.empty):
         self.error_placeholder = error_placeholder
 
     def display(self) -> None:
-        if st.session_state.error_message:
+        if 'error_message' in st.session_state and st.session_state.error_message:
             self.error_placeholder.error(st.session_state.error_message)
             st.session_state.error_message = ""  # Clear the error message after displaying
 
