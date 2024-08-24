@@ -234,7 +234,7 @@ class TradingBot:
 
         for symbol in symbols:
             try:
-                current_price = prices[symbol]
+                current_price = prices.get(symbol, None)
                 if current_price is None:
                     logger.warning(f"Skipping {symbol} due to unavailable price data")
                     continue
