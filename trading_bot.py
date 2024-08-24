@@ -3,6 +3,7 @@ import logging
 from datetime import datetime
 from collections import deque
 from statistics import mean, stdev
+import random
 from typing import Dict, List, Optional, Tuple
 from wallet import Wallet, Account, Currency
 from config import load_config
