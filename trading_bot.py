@@ -5,7 +5,7 @@ from collections import deque
 from statistics import mean, stdev
 from typing import Dict, List, Optional, Tuple
 from wallet import Wallet
-from config import load_config, fetch_real_time_prices, place_spot_order
+from config import load_config, fetch_real_time_prices, place_spot_order, market_client, trade_client, user_client
 import asyncio
 
 # Set up logging
@@ -50,7 +50,7 @@ class TradingBot:
     async def update_wallet_balances(self) -> None:
         if not self.is_simulation:
             try:
-                accounts = await asyncio.to_thread(User(key=self.api_key, secret=self.api_secret, passphrase=self.api_passphrase).get_account_list)
+                accounts = await asyncio.to_thread(user_client.get_account_list)
                 for account in accounts:
                     if account['type'] == 'trade':
                         await self.wallet.update_account_balance("trading", account['currency'], float(account['available']))
