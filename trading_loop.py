@@ -3,8 +3,7 @@ import streamlit as st
 from typing import List, Tuple, Dict, Any
 from trading_bot import TradingBot
 import logging
-from config import load_config, fetch_real_time_prices
-from kucoin.client import Client
+from config import load_config, fetch_real_time_prices, kucoin_client_manager
 from kucoin.exceptions import KucoinAPIException
 
 logger = logging.getLogger(__name__)
@@ -30,11 +29,6 @@ class TradingLoop:
         self.profit_margin = profit_margin
         self.num_orders = num_orders
         self.config = asyncio.run(load_config())
-        self.kucoin_client = Client(
-            self.config['api_key'],
-            self.config['api_secret'],
-            self.config['api_passphrase']
-        )
 
     @handle_trading_errors
     async def run(self, stop_event: asyncio.Event) -> None:
@@ -131,8 +125,7 @@ async def stop_trading_loop(stop_event: asyncio.Event, trading_task: asyncio.Tas
 if __name__ == "__main__":
     async def run_test():
         config = await load_config()
-        bot = TradingBot(config['api_key'], config['api_secret'], config['api_passphrase'], config['bot_config']['update_interval'])
-        await bot.initialize()
+        bot = await TradingBot.create(config['bot_config']['update_interval'])
         chosen_symbols = config['default_trading_symbols']
         profit_margin = config['default_profit_margin']
         num_orders = config['default_num_orders']
