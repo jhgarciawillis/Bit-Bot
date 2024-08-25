@@ -47,12 +47,15 @@ def display_trading_account_balance(bot: TradingBot):
 async def display_error_message(error_placeholder: st.empty, error: Exception) -> None:
     logger.error(f"An error occurred: {error}")
     st.error(f"An error occurred: {error}")
-    await ErrorMessage(error_placeholder).display()
+    error_message = ErrorMessage(error_placeholder)
+    await error_message.display()
 
 async def main():
     logger.debug("Starting main function...")
     st.set_page_config(layout="wide")
     st.title("Cryptocurrency Trading Bot")
+
+    error_placeholder = st.empty()
 
     try:
         logger.debug("Loading configuration...")
@@ -94,7 +97,8 @@ async def main():
                 display_trading_account_balance(bot)
 
             logger.debug("Displaying simulation indicator...")
-            await SimulationIndicator(is_simulation).display()
+            simulation_indicator = SimulationIndicator(is_simulation)
+            await simulation_indicator.display()
 
             logger.debug("Fetching available trading symbols...")
             available_symbols = await get_available_trading_symbols()
@@ -116,11 +120,9 @@ async def main():
             trading_params = TradingParameters(config)
             usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade = await trading_params.display()
 
-            # Inform users about the total fees and suggest a higher profit margin
             logger.info("Informing users about total fees and suggested profit margin.")
             st.sidebar.info("Please note that the total fees for buying and selling are 0.2%. It is recommended to set a profit margin higher than 0.2% to cover the fees.")
 
-            # Save user inputs
             logger.debug("Saving user inputs to session state...")
             st.session_state.user_inputs = {
                 'user_selected_symbols': user_selected_symbols,
@@ -145,8 +147,6 @@ async def main():
             trading_controls = TradingControls(config)
             start_button, stop_button = await trading_controls.display()
 
-            error_placeholder = st.empty()
-
             if start_button and not st.session_state.is_trading:
                 logger.info("Starting trading...")
                 st.session_state.is_trading = True
@@ -157,7 +157,7 @@ async def main():
             if st.session_state.is_trading:
                 logger.debug("Trading is in progress, updating charts and status...")
                 chart_creator = ChartCreator(bot)
-                chart_display = ChartDisplay(st.empty(), st.empty())
+                chart_display = ChartDisplay(st.empty())
                 last_update_time = datetime.now() - timedelta(seconds=31)  # Ensure first update happens immediately
 
                 try:
@@ -171,16 +171,17 @@ async def main():
                             logger.debug("Fetching current prices and updating status table...")
                             current_prices = await fetch_real_time_prices(user_selected_symbols, is_simulation)
                             current_status = bot.get_current_status(current_prices)
-                            await StatusTable(st, bot, user_selected_symbols).display(current_status)
+                            status_table = StatusTable(st, bot, user_selected_symbols)
+                            await status_table.display(current_status)
 
                         logger.debug("Displaying trade messages...")
-                        await TradeMessages(st.empty()).display()
+                        trade_messages = TradeMessages(st.empty())
+                        await trade_messages.display()
 
                         last_update_time = current_time
 
                 except Exception as e:
                     logger.error(f"An error occurred in the main loop: {e}")
-                    st.error(f"An error occurred: {e}")
                     await display_error_message(error_placeholder, e)
 
             if stop_button or (not st.session_state.is_trading and st.session_state.stop_event):
@@ -195,7 +196,6 @@ async def main():
 
     except Exception as e:
         logger.error(f"An error occurred in the main function: {e}")
-        st.error(f"An error occurred: {e}")
         await display_error_message(error_placeholder, e)
 
 if __name__ == "__main__":
