@@ -23,25 +23,25 @@ def handle_trading_errors(func):
 
 class TradingBot:
     def __init__(self, api_key: str, api_secret: str, api_passphrase: str, update_interval: int):
-        self.config = load_config()
         self.api_key = api_key
         self.api_secret = api_secret
         self.api_passphrase = api_passphrase
         self.wallet = Wallet()
-        self.is_simulation = self.config['simulation_mode']['enabled']
         self.update_interval = update_interval
         self.profits: Dict[str, float] = {}
         self.total_profit: float = 0
         self.symbol_allocations: Dict[str, float] = {}
-        self.usdt_liquid_percentage: float = self.config['default_usdt_liquid_percentage']
         self.price_history: Dict[str, deque] = {}
         self.active_trades: Dict[str, Dict] = {}
-        self.PRICE_HISTORY_LENGTH: int = self.config['chart_config']['history_length']
         self.total_trades: int = 0
         self.avg_profit_per_trade: float = 0
         self.status_history: List[Dict] = []
 
     async def initialize(self) -> None:
+        self.config = await load_config()
+        self.is_simulation = self.config['simulation_mode']['enabled']
+        self.usdt_liquid_percentage = self.config['default_usdt_liquid_percentage']
+        self.PRICE_HISTORY_LENGTH = self.config['chart_config']['history_length']
         await self.wallet.add_account("trading")
         if not self.is_simulation:
             await self.update_wallet_balances()
@@ -127,8 +127,8 @@ class TradingBot:
             return order
         return None
 
-    def get_current_status(self, prices: Dict[str, float]) -> Dict:
-        current_total_usdt = asyncio.run(self.wallet.get_total_balance_in_usdt(lambda symbol: prices.get(symbol.split('-')[0], None)))
+    async def get_current_status(self, prices: Dict[str, float]) -> Dict:
+        current_total_usdt = await self.wallet.get_total_balance_in_usdt(lambda symbol: prices.get(symbol.split('-')[0], None))
         liquid_usdt = current_total_usdt * self.usdt_liquid_percentage
         tradable_usdt = max(current_total_usdt - liquid_usdt, 0)
         
@@ -173,7 +173,7 @@ class TradingBot:
         prices = await fetch_real_time_prices(symbols, self.is_simulation)
         await self.update_price_history(symbols, prices)
 
-        current_status = self.get_current_status(prices)
+        current_status = await self.get_current_status(prices)
         tradable_usdt = current_status['tradable_usdt']
 
         for symbol in symbols:
