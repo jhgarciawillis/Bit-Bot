@@ -1,7 +1,6 @@
 import os
 import logging
 from typing import Dict, List, Any
-from kucoin.client import Market, Trade, User
 import yaml
 import streamlit as st
 import asyncio
@@ -10,6 +9,15 @@ import random
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Try to import KuCoin client, handle potential import errors
+try:
+    from kucoin.client import Market, Trade, User
+    KUCOIN_IMPORT_SUCCESSFUL = True
+except ImportError:
+    logger.warning("Failed to import KuCoin client. Some features may not be available.")
+    KUCOIN_IMPORT_SUCCESSFUL = False
+    Market, Trade, User = None, None, None
 
 # Global variables
 market_client: Market = None
@@ -27,6 +35,10 @@ DEFAULT_USDT_LIQUID_PERCENTAGE: float = 0.5  # 50%
 async def initialize_clients() -> None:
     """Initialize KuCoin API clients asynchronously."""
     global market_client, trade_client, user_client
+
+    if not KUCOIN_IMPORT_SUCCESSFUL:
+        logger.error("KuCoin client import failed. Cannot initialize clients.")
+        return
 
     try:
         API_KEY = st.secrets["api_credentials"]["api_key"]
@@ -57,11 +69,8 @@ async def get_available_trading_symbols() -> List[str]:
         else:
             logger.warning("Market client not initialized. Using default trading symbols.")
             return DEFAULT_TRADING_SYMBOLS
-    except ConnectionError as e:
-        logger.error(f"Connection error while fetching symbol list: {e}")
-        return DEFAULT_TRADING_SYMBOLS
     except Exception as e:
-        logger.error(f"Unexpected error fetching symbol list: {e}")
+        logger.error(f"Error fetching symbol list: {e}")
         return DEFAULT_TRADING_SYMBOLS
 
 async def validate_default_trading_symbols(config: Dict[str, Any]) -> Dict[str, Any]:
