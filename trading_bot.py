@@ -1,11 +1,10 @@
-import time
 import logging
 from datetime import datetime
 from collections import deque
 from statistics import mean, stdev
 from typing import Dict, List, Optional, Tuple
-from wallet import Wallet
-from config import load_config, fetch_real_time_prices, place_spot_order, market_client, trade_client, user_client
+from wallet import create_wallet
+from config import load_config, fetch_real_time_prices, place_spot_order, kucoin_client_manager
 import asyncio
 
 # Set up logging
@@ -18,15 +17,11 @@ def handle_trading_errors(func):
             return await func(*args, **kwargs)
         except Exception as e:
             logger.error(f"Error in {func.__name__}: {str(e)}")
-            # You might want to add more error handling logic here
     return wrapper
 
 class TradingBot:
-    def __init__(self, api_key: str, api_secret: str, api_passphrase: str, update_interval: int):
-        self.api_key = api_key
-        self.api_secret = api_secret
-        self.api_passphrase = api_passphrase
-        self.wallet = Wallet()
+    def __init__(self, update_interval: int):
+        self.wallet = None
         self.update_interval = update_interval
         self.profits: Dict[str, float] = {}
         self.total_profit: float = 0
@@ -42,7 +37,7 @@ class TradingBot:
         self.is_simulation = self.config['simulation_mode']['enabled']
         self.usdt_liquid_percentage = self.config['default_usdt_liquid_percentage']
         self.PRICE_HISTORY_LENGTH = self.config['chart_config']['history_length']
-        await self.wallet.add_account("trading")
+        self.wallet = await create_wallet()
         if not self.is_simulation:
             await self.update_wallet_balances()
 
@@ -50,6 +45,7 @@ class TradingBot:
     async def update_wallet_balances(self) -> None:
         if not self.is_simulation:
             try:
+                user_client = kucoin_client_manager.get_client('User')
                 accounts = await asyncio.to_thread(user_client.get_account_list)
                 for account in accounts:
                     if account['type'] == 'trade':
@@ -96,7 +92,7 @@ class TradingBot:
         price_mean = mean(prices)
         price_stdev = stdev(prices) if len(set(prices)) > 1 else 0
         
-        if current_price is not None and current_price < price_mean and (price_mean - current_price) < price_stdev:
+        if current_price < price_mean and (price_mean - current_price) < price_stdev:
             return price_mean
         
         return None
@@ -128,7 +124,7 @@ class TradingBot:
         return None
 
     async def get_current_status(self, prices: Dict[str, float]) -> Dict:
-        current_total_usdt = await self.wallet.get_total_balance_in_usdt(lambda symbol: prices.get(symbol.split('-')[0], None))
+        current_total_usdt = await self.wallet.get_total_balance_in_usdt()
         liquid_usdt = current_total_usdt * self.usdt_liquid_percentage
         tradable_usdt = max(current_total_usdt - liquid_usdt, 0)
         
@@ -201,7 +197,7 @@ class TradingBot:
                 for order_id, trade in list(self.active_trades.items()):
                     if trade['symbol'] == symbol:
                         target_sell_price = trade['buy_price'] * (1 + profit_margin)
-                        if current_price is not None and current_price >= target_sell_price:
+                        if current_price >= target_sell_price:
                             sell_amount_crypto = trade['amount']
                             sell_order = await self.place_sell_order(symbol, sell_amount_crypto, target_sell_price)
                             if sell_order:
@@ -222,3 +218,23 @@ class TradingBot:
         self.update_allocations(current_status['current_total_usdt'], self.usdt_liquid_percentage)
 
         return current_status
+
+async def create_trading_bot(update_interval: int) -> TradingBot:
+    bot = TradingBot(update_interval)
+    await bot.initialize()
+    return bot
+
+if __name__ == "__main__":
+    async def run_test():
+        config = await load_config()
+        bot = await create_trading_bot(config['bot_config']['update_interval'])
+        
+        # Run a single trading iteration
+        symbols = config['default_trading_symbols']
+        profit_margin = config['default_profit_margin']
+        num_orders = config['default_num_orders']
+        
+        status = await bot.run_trading_iteration(symbols, profit_margin, num_orders)
+        print("Current trading status:", status)
+
+    asyncio.run(run_test())
