@@ -4,6 +4,7 @@ from typing import Dict, List, Any
 from kucoin.client import Market, Trade, User
 import yaml
 import streamlit as st
+import asyncio
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -22,8 +23,8 @@ DEFAULT_PROFIT_MARGIN: float = 0.01  # 1%
 DEFAULT_NUM_ORDERS: int = 1
 DEFAULT_USDT_LIQUID_PERCENTAGE: float = 0.5  # 50%
 
-def initialize_clients() -> None:
-    """Initialize KuCoin API clients."""
+async def initialize_clients() -> None:
+    """Initialize KuCoin API clients asynchronously."""
     global market_client, trade_client, user_client
 
     try:
@@ -35,9 +36,9 @@ def initialize_clients() -> None:
         if not all([API_KEY, API_SECRET, API_PASSPHRASE]):
             raise ValueError("Missing KuCoin API credentials in Streamlit secrets")
 
-        market_client = Market(url=API_URL)
-        trade_client = Trade(key=API_KEY, secret=API_SECRET, passphrase=API_PASSPHRASE, url=API_URL)
-        user_client = User(key=API_KEY, secret=API_SECRET, passphrase=API_PASSPHRASE, url=API_URL)
+        market_client = await asyncio.to_thread(Market, url=API_URL)
+        trade_client = await asyncio.to_thread(Trade, key=API_KEY, secret=API_SECRET, passphrase=API_PASSPHRASE, url=API_URL)
+        user_client = await asyncio.to_thread(User, key=API_KEY, secret=API_SECRET, passphrase=API_PASSPHRASE, url=API_URL)
         logger.info("Clients initialized successfully")
     except Exception as e:
         logger.error(f"Error initializing clients: {e}")
@@ -45,11 +46,11 @@ def initialize_clients() -> None:
         trade_client = None
         user_client = None
 
-def get_available_trading_symbols() -> List[str]:
-    """Fetch available trading symbols from KuCoin API."""
+async def get_available_trading_symbols() -> List[str]:
+    """Fetch available trading symbols from KuCoin API asynchronously."""
     try:
         if market_client:
-            symbol_list = market_client.get_symbol_list()
+            symbol_list = await asyncio.to_thread(market_client.get_symbol_list)
             available_symbols = [item['symbol'] for item in symbol_list if isinstance(item, dict) and 'symbol' in item and item['symbol'].endswith('-USDT')]
             available_symbols = [symbol.replace('-USDT', '') for symbol in available_symbols]
             return available_symbols
@@ -63,9 +64,9 @@ def get_available_trading_symbols() -> List[str]:
         logger.error(f"Unexpected error fetching symbol list: {e}")
         return DEFAULT_TRADING_SYMBOLS
 
-def validate_default_trading_symbols(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate and update the default trading symbols in the configuration."""
-    available_symbols = get_available_trading_symbols()
+async def validate_default_trading_symbols(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and update the default trading symbols in the configuration asynchronously."""
+    available_symbols = await get_available_trading_symbols()
     default_trading_symbols = config.get('default_trading_symbols', DEFAULT_TRADING_SYMBOLS)
 
     # Check if the default trading symbols are available
@@ -88,26 +89,28 @@ SIMULATION_MODE: Dict[str, Any] = {
 }
 
 # Chart configuration
-CHART_CONFIG: Dict[str, int] = {
+CHART_CONFIG: Dict[str, Any] = {
     'update_interval': 1,  # in seconds
     'history_length': 120,  # in minutes
+    'height': 600,
+    'width': 800,
 }
 
 # Trading bot configuration
-BOT_CONFIG: Dict[str, int] = {
+BOT_CONFIG: Dict[str, Any] = {
     'update_interval': 1,  # in seconds
     'price_check_interval': 5,  # in seconds
 }
 
 # Error handling configuration
-ERROR_CONFIG: Dict[str, int] = {
+ERROR_CONFIG: Dict[str, Any] = {
     'max_retries': 3,
     'retry_delay': 5,  # in seconds
 }
 
-def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
+async def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
     """
-    Load configuration from a YAML file and Streamlit secrets.
+    Load configuration from a YAML file and Streamlit secrets asynchronously.
     
     :param config_file: Path to the YAML configuration file
     :return: Dictionary containing the configuration
@@ -155,7 +158,7 @@ def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
         logger.info(f"Using default value for default_num_orders: {DEFAULT_NUM_ORDERS}")
 
     # Validate and update the default trading symbols
-    config = validate_default_trading_symbols(config)
+    config = await validate_default_trading_symbols(config)
 
     return config
 
