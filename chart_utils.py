@@ -16,54 +16,60 @@ class ChartCreator:
 
     @handle_trading_errors
     async def create_charts_async(self) -> Dict:
-        price_buy_target_fig = await self.create_price_buy_target_chart_async()
+        individual_price_charts = await self.create_individual_price_charts_async()
         total_profit_fig = await self.create_total_profit_chart_async()
         
         return {
-            'price_buy_target': price_buy_target_fig,
+            'individual_price_charts': individual_price_charts,
             'total_profit': total_profit_fig
         }
 
     @handle_trading_errors
-    async def create_price_buy_target_chart_async(self) -> go.Figure:
-        fig = make_subplots(rows=len(self.bot.symbol_allocations), cols=1, shared_xaxes=True, vertical_spacing=0.02)
+    async def create_individual_price_charts_async(self) -> Dict[str, go.Figure]:
+        charts = {}
+        for symbol in self.bot.symbol_allocations:
+            charts[symbol] = await self.create_single_price_chart_async(symbol)
+        return charts
 
-        tasks = [self.create_symbol_trace(symbol, i) for i, symbol in enumerate(self.bot.symbol_allocations, start=1)]
-        symbol_traces = await asyncio.gather(*tasks)
+    async def create_single_price_chart_async(self, symbol: str) -> go.Figure:
+        fig = go.Figure()
 
-        for traces in symbol_traces:
-            for trace in traces:
-                fig.add_trace(trace[0], row=trace[1], col=1)
-
-        fig.update_layout(
-            height=self.config['chart_config']['height'],
-            width=self.config['chart_config']['width'],
-            title_text="Price and Buy Target Chart",
-            xaxis_rangeslider_visible=False
-        )
-        fig.update_xaxes(title_text="Timestamp", row=len(self.bot.symbol_allocations), col=1)
-
-        return fig
-
-    async def create_symbol_trace(self, symbol: str, row: int) -> List:
         price_data = self.bot.price_history.get(symbol, [])
         timestamps = [entry['timestamp'] for entry in price_data]
         prices = [entry['price'] for entry in price_data]
 
-        price_trace = go.Scatter(x=timestamps, y=prices, mode='lines', name=f'{symbol} Price')
+        fig.add_trace(go.Scatter(x=timestamps, y=prices, mode='lines', name=f'{symbol} Price'))
 
-        buy_signals = [entry['price'] for entry in price_data if self.bot.should_buy(symbol, entry['price'])]
-        buy_timestamps = [entry['timestamp'] for entry in price_data if self.bot.should_buy(symbol, entry['price'])]
+        buy_signals = [entry['price'] for entry in price_data if await self.bot.should_buy(symbol, entry['price'])]
+        buy_timestamps = [entry['timestamp'] for entry in price_data if await self.bot.should_buy(symbol, entry['price'])]
 
-        buy_trace = go.Scatter(
+        fig.add_trace(go.Scatter(
             x=buy_timestamps,
             y=buy_signals,
             mode='markers',
             marker=dict(symbol='triangle-up', size=10),
             name=f'{symbol} Buy Signal'
+        ))
+
+        # Add calculated buy price
+        if symbol in self.bot.active_trades:
+            buy_price = self.bot.active_trades[symbol]['buy_price']
+            fig.add_hline(y=buy_price, line_dash="dash", annotation_text="Buy Price")
+
+        # Add target sell price
+        if symbol in self.bot.active_trades:
+            target_sell_price = self.bot.active_trades[symbol]['target_sell_price']
+            fig.add_hline(y=target_sell_price, line_dash="dot", annotation_text="Target Sell Price")
+
+        fig.update_layout(
+            title=f'{symbol} Price Chart',
+            xaxis_title='Timestamp',
+            yaxis_title='Price (USDT)',
+            height=self.config['chart_config']['height'],
+            width=self.config['chart_config']['width']
         )
 
-        return [(price_trace, row), (buy_trace, row)]
+        return fig
 
     @handle_trading_errors
     async def create_total_profit_chart_async(self) -> go.Figure:
