@@ -6,9 +6,8 @@ from statistics import mean, stdev
 import random
 from typing import Dict, List, Optional, Tuple
 from wallet import Wallet, Account, Currency
-from config import load_config
+from config import load_config, fetch_real_time_prices, place_spot_order
 import asyncio
-from trading_loop import handle_trading_errors
 
 try:
     from kucoin.client import Market, Trade, User
@@ -20,80 +19,21 @@ except ImportError as e:
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class TradingClient:
-    def __init__(self, api_key: str, api_secret: str, api_passphrase: str, api_url: str):
-        self.api_key = api_key
-        self.api_secret = api_secret
-        self.api_passphrase = api_passphrase
-        self.api_url = api_url
-        self.market_client: Optional[Market] = None
-        self.trade_client: Optional[Trade] = None
-        self.user_client: Optional[User] = None
-        self.is_simulation: bool = False
-
-    async def initialize(self) -> None:
-        logger.info("Initializing clients")
-        if Market and Trade and User:
-            try:
-                self.market_client = await asyncio.to_thread(Market, url=self.api_url)
-                self.trade_client = await asyncio.to_thread(Trade, key=self.api_key, secret=self.api_secret, passphrase=self.api_passphrase, url=self.api_url)
-                self.user_client = await asyncio.to_thread(User, key=self.api_key, secret=self.api_secret, passphrase=self.api_passphrase, url=self.api_url)
-                logger.info("Clients initialized successfully")
-            except Exception as e:
-                logger.error(f"Error initializing clients: {type(e).__name__}")
-                self.market_client = None
-                self.trade_client = None
-                self.user_client = None
-        else:
-            logger.warning("Running in simulation mode or KuCoin client not available.")
-            self.is_simulation = True
-
-    @handle_trading_errors
-    async def get_current_prices(self, symbols: List[str]) -> Dict[str, float]:
-        prices = {}
-        for symbol in symbols:
-            try:
-                if self.market_client and not self.is_simulation:
-                    ticker = await asyncio.to_thread(self.market_client.get_ticker, symbol)
-                    prices[symbol] = float(ticker['price'])
-                else:
-                    # Simulation mode: generate random price movements
-                    last_price = prices.get(symbol, 100)  # Default to 100 if no previous price
-                    price_change = random.uniform(-0.001, 0.001)  # -0.1% to 0.1% change
-                    new_price = last_price * (1 + price_change)
-                    prices[symbol] = round(new_price, 2)
-            except Exception as e:
-                logger.error(f"Error fetching price for {symbol}: {type(e).__name__}")
-                prices[symbol] = None
-        
-        logger.info(f"Current prices: {prices}")
-        return prices
-
-    @handle_trading_errors
-    async def place_order(self, symbol: str, side: str, amount: float, price: Optional[float] = None) -> Optional[Dict]:
-        if self.trade_client and not self.is_simulation:
-            try:
-                if price:
-                    order = await asyncio.to_thread(self.trade_client.create_limit_order, symbol, side, amount, price)
-                else:
-                    order = await asyncio.to_thread(self.trade_client.create_market_order, symbol, side, amount)
-                return order
-            except Exception as e:
-                logger.error(f"Error placing {side} order for {symbol}: {type(e).__name__}")
-                return None
-        else:
-            # Simulation mode
-            return {
-                'orderId': f'sim_{side}_{symbol}_{time.time()}',
-                'price': price or (await self.get_current_prices([symbol]))[symbol],
-                'amount': amount,
-                'fee': amount * 0.001  # Simulated 0.1% fee
-            }
+def handle_trading_errors(func):
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in {func.__name__}: {str(e)}")
+            # You might want to add more error handling logic here
+    return wrapper
 
 class TradingBot:
     def __init__(self, api_key: str, api_secret: str, api_passphrase: str, update_interval: int):
         self.config = load_config()
-        self.trading_client = TradingClient(api_key, api_secret, api_passphrase, self.config['api_url'])
+        self.api_key = api_key
+        self.api_secret = api_secret
+        self.api_passphrase = api_passphrase
         self.wallet = Wallet()
         self.wallet.add_account("trading")
         self.is_simulation = self.config['simulation_mode']['enabled']
@@ -110,18 +50,17 @@ class TradingBot:
         self.status_history: List[Dict] = []
 
     async def initialize(self) -> None:
-        await self.trading_client.initialize()
         if not self.is_simulation:
             await self.update_wallet_balances()
 
     @handle_trading_errors
     async def update_wallet_balances(self) -> None:
-        if self.trading_client.user_client:
+        if not self.is_simulation:
             try:
-                accounts = await asyncio.to_thread(self.trading_client.user_client.get_account_list)
+                accounts = await asyncio.to_thread(User(key=self.api_key, secret=self.api_secret, passphrase=self.api_passphrase).get_account_list)
                 for account in accounts:
                     if account['type'] == 'trade':
-                        self.wallet.update_account_balance("trading", account['currency'], float(account['available']))
+                        await self.wallet.update_account_balance("trading", account['currency'], float(account['available']))
                 logger.info(f"Updated wallet balances: {self.wallet.get_account_summary()}")
             except Exception as e:
                 logger.error(f"Error updating wallet balances: {e}")
@@ -132,7 +71,7 @@ class TradingBot:
     def get_tradable_balance(self, currency: str = 'USDT') -> float:
         return self.wallet.get_account("trading").get_currency_balance(currency)
 
-    def get_user_allocations(self, user_selected_symbols: List[str], total_usdt_balance: float) -> Tuple[Dict[str, float], float]:
+    async def get_user_allocations(self, user_selected_symbols: List[str], total_usdt_balance: float) -> Tuple[Dict[str, float], float]:
         tradable_usdt_amount = total_usdt_balance * (1 - self.usdt_liquid_percentage)
         
         if tradable_usdt_amount <= 0 or not user_selected_symbols:
@@ -145,7 +84,7 @@ class TradingBot:
         
         return symbol_allocations, tradable_usdt_amount
 
-    def update_price_history(self, symbols: List[str], prices: Dict[str, float]) -> None:
+    async def update_price_history(self, symbols: List[str], prices: Dict[str, float]) -> None:
         for symbol in symbols:
             if symbol not in self.price_history:
                 self.price_history[symbol] = deque(maxlen=self.PRICE_HISTORY_LENGTH)
@@ -154,9 +93,9 @@ class TradingBot:
                     'timestamp': datetime.now(),
                     'price': prices[symbol]
                 })
-                self.wallet.update_currency_price("trading", symbol, prices[symbol])
+                await self.wallet.update_currency_price("trading", symbol, prices[symbol])
 
-    def should_buy(self, symbol: str, current_price: float) -> Optional[float]:
+    async def should_buy(self, symbol: str, current_price: float) -> Optional[float]:
         if current_price is None or len(self.price_history[symbol]) < self.PRICE_HISTORY_LENGTH:
             return None
         
@@ -172,7 +111,16 @@ class TradingBot:
     @handle_trading_errors
     async def place_buy_order(self, symbol: str, amount_usdt: float, limit_price: float) -> Optional[Dict]:
         amount_crypto = amount_usdt / limit_price
-        order = await self.trading_client.place_order(symbol, 'buy', amount_crypto, limit_price)
+        if self.is_simulation:
+            order = {
+                'orderId': f'sim_buy_{symbol}_{time.time()}',
+                'price': limit_price,
+                'amount': amount_crypto,
+                'fee': amount_usdt * 0.001  # Simulated 0.1% fee
+            }
+        else:
+            order = await place_spot_order(symbol, 'buy', limit_price, amount_crypto)
+        
         if order:
             self.active_trades[order['orderId']] = {
                 'symbol': symbol,
@@ -186,7 +134,16 @@ class TradingBot:
 
     @handle_trading_errors
     async def place_sell_order(self, symbol: str, amount_crypto: float, target_sell_price: float) -> Optional[Dict]:
-        order = await self.trading_client.place_order(symbol, 'sell', amount_crypto, target_sell_price)
+        if self.is_simulation:
+            order = {
+                'orderId': f'sim_sell_{symbol}_{time.time()}',
+                'price': target_sell_price,
+                'amount': amount_crypto,
+                'fee': amount_crypto * target_sell_price * 0.001  # Simulated 0.1% fee
+            }
+        else:
+            order = await place_spot_order(symbol, 'sell', target_sell_price, amount_crypto)
+        
         if order:
             return order
         return None
@@ -234,8 +191,8 @@ class TradingBot:
 
     @handle_trading_errors
     async def run_trading_iteration(self, symbols: List[str], profit_margin: float, num_orders: int) -> Dict:
-        prices = await self.trading_client.get_current_prices(symbols)
-        self.update_price_history(symbols, prices)
+        prices = await fetch_real_time_prices(symbols)
+        await self.update_price_history(symbols, prices)
 
         current_status = self.get_current_status(prices)
         tradable_usdt = current_status['tradable_usdt']
@@ -251,7 +208,7 @@ class TradingBot:
                 usdt_balance = self.get_tradable_balance('USDT')
 
                 # Check if we should buy
-                limit_buy_price = self.should_buy(symbol, current_price)
+                limit_buy_price = await self.should_buy(symbol, current_price)
                 if limit_buy_price is not None and usdt_balance > 0:
                     buy_amount_usdt = min(allocated_value, usdt_balance)
                     if buy_amount_usdt > 0:
