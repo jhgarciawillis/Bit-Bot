@@ -98,7 +98,7 @@ async def update_trading_status(bot: TradingBot, chosen_symbols: List[str]) -> N
     :param bot: TradingBot instance
     :param chosen_symbols: List of trading symbols
     """
-    current_prices = await bot.trading_client.get_current_prices(chosen_symbols)
+    current_prices = await bot.get_current_prices(chosen_symbols)
     current_status = bot.get_current_status(current_prices)
 
     # Update Streamlit display with current status
