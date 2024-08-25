@@ -152,3 +152,21 @@ class Wallet:
         else:
             logger.warning(f"Transfer failed: Account {from_account} or {to_account} not found")
         return False
+
+    async def simulate_price_update(self, account_type: str, symbol: str, price: float) -> None:
+        """
+        Simulates a price update for a given currency in simulation mode.
+        """
+        await self.update_currency_price(account_type, symbol, price)
+
+    async def simulate_trade(self, account_type: str, symbol: str, amount: float, price: float, trade_type: str) -> None:
+        """
+        Simulates a trade (buy or sell) in simulation mode.
+        """
+        await self.record_trade(account_type, symbol, amount, price, trade_type)
+        if trade_type == 'buy':
+            await self.update_account_balance(account_type, symbol, self.get_currency_balance(account_type, symbol) + amount)
+            await self.update_account_balance(account_type, 'USDT', self.get_currency_balance(account_type, 'USDT') - (amount * price))
+        elif trade_type == 'sell':
+            await self.update_account_balance(account_type, symbol, self.get_currency_balance(account_type, symbol) - amount)
+            await self.update_account_balance(account_type, 'USDT', self.get_currency_balance(account_type, 'USDT') + (amount * price))
