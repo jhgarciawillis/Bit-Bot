@@ -159,8 +159,7 @@ async def main():
         except Exception as e:
             logger.error(f"An error occurred during bot initialization: {e}")
             st.error(f"An error occurred during bot initialization: {e}")
-
-    await ErrorMessage(error_placeholder).display()
+            await ErrorMessage(error_placeholder).display()
 
 if __name__ == "__main__":
     asyncio.run(main())
