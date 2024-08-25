@@ -1,7 +1,7 @@
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Any
 import asyncio
 import logging
 from config import load_config
@@ -12,10 +12,10 @@ logger = logging.getLogger(__name__)
 class ChartCreator:
     def __init__(self, bot):
         self.bot = bot
-        self.config = load_config()
+        self.config = asyncio.run(load_config())
 
     @handle_trading_errors
-    async def create_charts_async(self) -> Dict:
+    async def create_charts_async(self) -> Dict[str, Any]:
         individual_price_charts = await self.create_individual_price_charts_async()
         total_profit_fig = await self.create_total_profit_chart_async()
         
@@ -27,8 +27,10 @@ class ChartCreator:
     @handle_trading_errors
     async def create_individual_price_charts_async(self) -> Dict[str, go.Figure]:
         charts = {}
-        for symbol in self.bot.symbol_allocations:
-            charts[symbol] = await self.create_single_price_chart_async(symbol)
+        tasks = [self.create_single_price_chart_async(symbol) for symbol in self.bot.symbol_allocations]
+        results = await asyncio.gather(*tasks)
+        for symbol, chart in zip(self.bot.symbol_allocations, results):
+            charts[symbol] = chart
         return charts
 
     async def create_single_price_chart_async(self, symbol: str) -> go.Figure:
@@ -40,33 +42,36 @@ class ChartCreator:
 
         fig.add_trace(go.Scatter(x=timestamps, y=prices, mode='lines', name=f'{symbol} Price'))
 
-        buy_signals = [entry['price'] for entry in price_data if await self.bot.should_buy(symbol, entry['price'])]
-        buy_timestamps = [entry['timestamp'] for entry in price_data if await self.bot.should_buy(symbol, entry['price'])]
+        buy_signals = []
+        buy_timestamps = []
+        for entry in price_data:
+            should_buy = await self.bot.should_buy(symbol, entry['price'])
+            if should_buy is not None:
+                buy_signals.append(entry['price'])
+                buy_timestamps.append(entry['timestamp'])
 
         fig.add_trace(go.Scatter(
             x=buy_timestamps,
             y=buy_signals,
             mode='markers',
-            marker=dict(symbol='triangle-up', size=10),
+            marker=dict(symbol='triangle-up', size=10, color='green'),
             name=f'{symbol} Buy Signal'
         ))
 
-        # Add calculated buy price
-        if symbol in self.bot.active_trades:
-            buy_price = self.bot.active_trades[symbol]['buy_price']
-            fig.add_hline(y=buy_price, line_dash="dash", annotation_text="Buy Price")
-
-        # Add target sell price
-        if symbol in self.bot.active_trades:
-            target_sell_price = self.bot.active_trades[symbol]['target_sell_price']
-            fig.add_hline(y=target_sell_price, line_dash="dot", annotation_text="Target Sell Price")
+        active_trade = next((trade for trade in self.bot.active_trades.values() if trade['symbol'] == symbol), None)
+        if active_trade:
+            buy_price = active_trade['buy_price']
+            target_sell_price = active_trade['buy_price'] * (1 + self.bot.profits[symbol])
+            fig.add_hline(y=buy_price, line_dash="dash", annotation_text="Buy Price", line_color="blue")
+            fig.add_hline(y=target_sell_price, line_dash="dot", annotation_text="Target Sell Price", line_color="red")
 
         fig.update_layout(
             title=f'{symbol} Price Chart',
             xaxis_title='Timestamp',
             yaxis_title='Price (USDT)',
             height=self.config['chart_config']['height'],
-            width=self.config['chart_config']['width']
+            width=self.config['chart_config']['width'],
+            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
         )
 
         return fig
@@ -96,7 +101,10 @@ class ChartCreator:
             logger.info(f"Chart saved as {filename}")
         except Exception as e:
             logger.error(f"Error saving chart: {e}")
+            raise
 
-    def update_bot_data(self, bot):
-        """Update the bot instance with fresh data"""
+    async def update_bot_data(self, bot):
+        """Update the bot instance with fresh data asynchronously"""
         self.bot = bot
+        # Refresh config in case it has changed
+        self.config = await load_config()
