@@ -4,6 +4,7 @@ import pandas as pd
 from typing import Dict, List, Tuple, Any, Optional
 import asyncio
 import logging
+from config import verify_live_trading_access
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +87,7 @@ class StatusTable:
     @staticmethod
     async def format_target_sell_price(active_trades: Dict[str, Dict[str, Any]], symbol: str) -> str:
         buy_order = next((trade for trade in active_trades.values() if trade['symbol'] == symbol), None)
-        return f"{buy_order['target_sell_price']:.4f} USDT" if buy_order else 'N/A'
+        return f"{buy_order['buy_price'] * (1 + self.bot.profits[symbol]):.4f} USDT" if buy_order else 'N/A'
 
     @staticmethod
     async def format_current_pl(prices: Dict[str, float], active_trades: Dict[str, Dict[str, Any]], symbol: str) -> str:
@@ -214,7 +215,7 @@ class LiveTradingVerification:
 
     async def verify(self) -> bool:
         live_trading_key = st.sidebar.text_input("Enter live trading access key", type="password")
-        if live_trading_key == self.config['live_trading_access_key']:
+        if verify_live_trading_access(live_trading_key):
             st.sidebar.success("Live trading access key verified.")
             return True
         else:
