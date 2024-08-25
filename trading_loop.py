@@ -1,5 +1,4 @@
-import time
-import threading
+import asyncio
 import streamlit as st
 from typing import List, Tuple
 from trading_bot import TradingBot
@@ -8,7 +7,7 @@ from config import load_config
 
 logger = logging.getLogger(__name__)
 
-def trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: float, num_orders: int, stop_event: threading.Event) -> None:
+async def trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: float, num_orders: int, stop_event: asyncio.Event) -> None:
     """
     Main trading loop that runs continuously until stopped.
 
@@ -16,13 +15,13 @@ def trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: floa
     :param chosen_symbols: List of trading symbols
     :param profit_margin: Profit margin for trades
     :param num_orders: Number of orders to place
-    :param stop_event: Threading event to signal stopping the loop
+    :param stop_event: Asyncio event to signal stopping the loop
     """
-    config = load_config()
+    config = await load_config()
     
     while not stop_event.is_set():
         try:
-            current_status = bot.run_trading_iteration(chosen_symbols, profit_margin, num_orders)
+            current_status = await bot.run_trading_iteration(chosen_symbols, profit_margin, num_orders)
             
             # Update session state with new trade messages
             if 'trade_messages' in st.session_state:
@@ -34,7 +33,7 @@ def trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: floa
                 st.session_state.trade_messages = st.session_state.trade_messages[-10:]
             
             # Sleep for the configured update interval
-            time.sleep(config['bot_config']['update_interval'])
+            await asyncio.sleep(config['bot_config']['update_interval'])
             
         except Exception as e:
             logger.error(f"An error occurred in the trading loop: {str(e)}")
@@ -42,38 +41,36 @@ def trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: floa
                 st.session_state.error_message = f"An error occurred: {str(e)}"
             
             # Sleep for the configured retry delay before next iteration
-            time.sleep(config['error_config']['retry_delay'])
+            await asyncio.sleep(config['error_config']['retry_delay'])
 
-def initialize_trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: float, num_orders: int) -> Tuple[threading.Event, threading.Thread]:
+async def initialize_trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: float, num_orders: int) -> Tuple[asyncio.Event, asyncio.Task]:
     """
-    Initialize and start the trading loop in a separate thread.
+    Initialize and start the trading loop as an asyncio task.
 
     :param bot: TradingBot instance
     :param chosen_symbols: List of trading symbols
     :param profit_margin: Profit margin for trades
     :param num_orders: Number of orders to place
-    :return: Tuple containing the stop event and the trading thread
+    :return: Tuple containing the stop event and the trading task
     """
-    stop_event = threading.Event()
-    trading_thread = threading.Thread(
-        target=trading_loop,
-        args=(bot, chosen_symbols, profit_margin, num_orders, stop_event),
-        daemon=True
+    stop_event = asyncio.Event()
+    trading_task = asyncio.create_task(
+        trading_loop(bot, chosen_symbols, profit_margin, num_orders, stop_event)
     )
-    trading_thread.start()
-    return stop_event, trading_thread
+    return stop_event, trading_task
 
-def stop_trading_loop(stop_event: threading.Event, trading_thread: threading.Thread) -> None:
+async def stop_trading_loop(stop_event: asyncio.Event, trading_task: asyncio.Task) -> None:
     """
-    Stop the trading loop and wait for the thread to finish.
+    Stop the trading loop and wait for the task to finish.
 
-    :param stop_event: Threading event to signal stopping the loop
-    :param trading_thread: The trading thread to stop
+    :param stop_event: Asyncio event to signal stopping the loop
+    :param trading_task: The trading task to stop
     """
     stop_event.set()
-    trading_thread.join(timeout=10)  # Wait for up to 10 seconds for the thread to finish
-    if trading_thread.is_alive():
-        logger.warning("Trading thread did not stop within the timeout period.")
+    try:
+        await asyncio.wait_for(trading_task, timeout=10)  # Wait for up to 10 seconds for the task to finish
+    except asyncio.TimeoutError:
+        logger.warning("Trading task did not stop within the timeout period.")
     else:
         logger.info("Trading loop stopped successfully.")
 
@@ -84,9 +81,9 @@ def handle_trading_errors(func):
     :param func: Function to decorate
     :return: Wrapped function
     """
-    def wrapper(*args, **kwargs):
+    async def wrapper(*args, **kwargs):
         try:
-            return func(*args, **kwargs)
+            return await func(*args, **kwargs)
         except Exception as e:
             logger.error(f"Error in {func.__name__}: {str(e)}")
             if 'error_message' in st.session_state:
@@ -94,14 +91,14 @@ def handle_trading_errors(func):
     return wrapper
 
 @handle_trading_errors
-def update_trading_status(bot: TradingBot, chosen_symbols: List[str]) -> None:
+async def update_trading_status(bot: TradingBot, chosen_symbols: List[str]) -> None:
     """
     Update and display the current trading status.
 
     :param bot: TradingBot instance
     :param chosen_symbols: List of trading symbols
     """
-    current_prices = bot.trading_client.get_current_prices(chosen_symbols)
+    current_prices = await bot.trading_client.get_current_prices(chosen_symbols)
     current_status = bot.get_current_status(current_prices)
 
     # Update Streamlit display with current status
@@ -114,7 +111,7 @@ def update_trading_status(bot: TradingBot, chosen_symbols: List[str]) -> None:
     price_data = [[symbol, f"{price:.4f} USDT"] for symbol, price in current_prices.items()]
     st.table(price_data)
 
-def main_trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: float, num_orders: int) -> None:
+async def main_trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: float, num_orders: int) -> None:
     """
     Main function to run the trading loop and update status.
 
@@ -123,23 +120,27 @@ def main_trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin:
     :param profit_margin: Profit margin for trades
     :param num_orders: Number of orders to place
     """
-    stop_event, trading_thread = initialize_trading_loop(bot, chosen_symbols, profit_margin, num_orders)
+    stop_event, trading_task = await initialize_trading_loop(bot, chosen_symbols, profit_margin, num_orders)
     
     try:
         while not stop_event.is_set():
-            update_trading_status(bot, chosen_symbols)
-            time.sleep(5)  # Update status every 5 seconds
-    except KeyboardInterrupt:
-        logger.info("Keyboard interrupt received. Stopping trading loop.")
+            await update_trading_status(bot, chosen_symbols)
+            await asyncio.sleep(5)  # Update status every 5 seconds
+    except asyncio.CancelledError:
+        logger.info("Trading loop cancelled. Stopping trading loop.")
     finally:
-        stop_trading_loop(stop_event, trading_thread)
+        await stop_trading_loop(stop_event, trading_task)
 
 if __name__ == "__main__":
     # This block allows running the trading loop independently for testing
-    config = load_config()
-    bot = TradingBot(config['api_key'], config['api_secret'], config['api_passphrase'], config['bot_config']['update_interval'])
-    chosen_symbols = config['default_trading_symbols']
-    profit_margin = config['default_profit_margin']
-    num_orders = config['default_num_orders']
-    
-    main_trading_loop(bot, chosen_symbols, profit_margin, num_orders)
+    async def run():
+        config = await load_config()
+        bot = TradingBot(config['api_key'], config['api_secret'], config['api_passphrase'], config['bot_config']['update_interval'])
+        await bot.initialize()
+        chosen_symbols = config['default_trading_symbols']
+        profit_margin = config['default_profit_margin']
+        num_orders = config['default_num_orders']
+        
+        await main_trading_loop(bot, chosen_symbols, profit_margin, num_orders)
+
+    asyncio.run(run())
