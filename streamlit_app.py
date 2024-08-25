@@ -37,6 +37,11 @@ def display_trading_account_balance(bot: TradingBot):
     trading_account_balance = bot.get_account_balance('USDT')
     st.sidebar.info(f"Trading Account Balance: {trading_account_balance:.2f} USDT")
 
+async def display_error_message(error_placeholder: st.empty, error: Exception) -> None:
+    logger.error(f"An error occurred: {error}")
+    st.error(f"An error occurred: {error}")
+    await ErrorMessage(error_placeholder).display()
+
 async def main():
     st.set_page_config(layout="wide")
     st.title("Cryptocurrency Trading Bot")
@@ -143,8 +148,7 @@ async def main():
                         last_update_time = current_time
 
                 except Exception as e:
-                    logger.error(f"An error occurred in the main loop: {e}")
-                    st.error(f"An error occurred: {e}")
+                    await display_error_message(error_placeholder, e)
 
             if stop_button or (not st.session_state.is_trading and st.session_state.stop_event):
                 st.session_state.is_trading = False
@@ -157,9 +161,7 @@ async def main():
                 table_container.empty()
 
     except Exception as e:
-        logger.error(f"An error occurred in the main function: {e}")
-        st.error(f"An error occurred: {e}")
-        await ErrorMessage(error_placeholder).display()
+        await display_error_message(error_placeholder, e)
 
 if __name__ == "__main__":
     asyncio.run(main())
