@@ -5,6 +5,7 @@ from kucoin.client import Market, Trade, User
 import yaml
 import streamlit as st
 import asyncio
+import random
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -171,43 +172,63 @@ def verify_live_trading_access(input_key: str) -> bool:
     correct_key = st.secrets["api_credentials"]["perso_key"]
     return input_key == correct_key
 
-async def fetch_real_time_prices(symbols: List[str]) -> Dict[str, float]:
+async def fetch_real_time_prices(symbols: List[str], is_simulation: bool = False) -> Dict[str, float]:
     """
-    Fetch real-time prices for the given symbols using KuCoin API.
+    Fetch real-time prices for the given symbols using KuCoin API or simulate prices.
     
     :param symbols: List of trading symbols
+    :param is_simulation: Boolean indicating whether to use simulated prices
     :return: Dictionary of symbol prices
     """
     prices = {}
     try:
-        for symbol in symbols:
-            ticker = await asyncio.to_thread(market_client.get_ticker, symbol)
-            prices[symbol] = float(ticker['price'])
-        logger.info(f"Fetched real-time prices: {prices}")
+        if is_simulation:
+            for symbol in symbols:
+                # Simulate price movements
+                base_price = 100  # You can adjust this or use a different base for each symbol
+                price_change = random.uniform(-0.001, 0.001)  # -0.1% to 0.1% change
+                prices[symbol] = round(base_price * (1 + price_change), 2)
+        else:
+            for symbol in symbols:
+                ticker = await asyncio.to_thread(market_client.get_ticker, symbol)
+                prices[symbol] = float(ticker['price'])
+        logger.info(f"Fetched {'simulated' if is_simulation else 'real-time'} prices: {prices}")
     except Exception as e:
-        logger.error(f"Error fetching real-time prices: {e}")
+        logger.error(f"Error fetching {'simulated' if is_simulation else 'real-time'} prices: {e}")
     return prices
 
-async def place_spot_order(symbol: str, side: str, price: float, size: float) -> Dict[str, Any]:
+async def place_spot_order(symbol: str, side: str, price: float, size: float, is_simulation: bool = False) -> Dict[str, Any]:
     """
-    Place a spot order on KuCoin.
+    Place a spot order on KuCoin or simulate order placement.
     
     :param symbol: Trading symbol
     :param side: 'buy' or 'sell'
     :param price: Order price
     :param size: Order size
+    :param is_simulation: Boolean indicating whether to simulate order placement
     :return: Order details
     """
     try:
-        order = await asyncio.to_thread(
-            trade_client.create_limit_order,
-            symbol=symbol,
-            side=side,
-            price=str(price),
-            size=str(size)
-        )
-        logger.info(f"Placed {side} order for {symbol}: {order}")
+        if is_simulation:
+            # Simulate order placement
+            order = {
+                'orderId': f'sim_{side}_{symbol}_{asyncio.get_event_loop().time()}',
+                'symbol': symbol,
+                'side': side,
+                'price': price,
+                'size': size,
+                'fee': size * price * 0.001  # Simulated 0.1% fee
+            }
+        else:
+            order = await asyncio.to_thread(
+                trade_client.create_limit_order,
+                symbol=symbol,
+                side=side,
+                price=str(price),
+                size=str(size)
+            )
+        logger.info(f"Placed {'simulated' if is_simulation else 'real'} {side} order for {symbol}: {order}")
         return order
     except Exception as e:
-        logger.error(f"Error placing {side} order for {symbol}: {e}")
+        logger.error(f"Error placing {'simulated' if is_simulation else 'real'} {side} order for {symbol}: {e}")
         return {}
