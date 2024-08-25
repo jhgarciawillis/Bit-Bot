@@ -1,166 +1,164 @@
-import streamlit as st
-import asyncio
+from datetime import datetime
+from typing import Dict, List, Tuple, Callable, Optional
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, Any
-from trading_bot import TradingBot
-from chart_utils import ChartCreator
-from trading_loop import initialize_trading_loop, stop_trading_loop
-from ui_components import StatusTable, TradeMessages, ErrorMessage, initialize_session_state, SidebarConfig, SymbolSelector, TradingParameters, TradingControls, ChartDisplay, SimulationIndicator
-from config import load_config, initialize_clients, get_available_trading_symbols, verify_live_trading_access, fetch_real_time_prices
-from wallet import Wallet
+import asyncio
 
-# Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-async def initialize_bot(config: Dict[str, Any], is_simulation: bool, simulated_usdt_balance: float = 0) -> TradingBot:
-    api_key = config['api_key']
-    api_secret = config['api_secret']
-    api_passphrase = config['api_passphrase']
-    
-    bot = TradingBot(api_key, api_secret, api_passphrase, config['bot_config']['update_interval'])
-    bot.is_simulation = is_simulation
-    
-    if is_simulation:
-        await bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
-    else:
-        await bot.initialize()
-    
-    return bot
+class Currency:
+    def __init__(self, symbol: str, balance: float = 0):
+        self.symbol: str = symbol
+        self.balance: float = balance
+        self.price_history: List[Tuple[datetime, float]] = []
+        self.buy_history: List[Tuple[datetime, float, float]] = []
+        self.sell_history: List[Tuple[datetime, float, float]] = []
+        self.current_price: Optional[float] = None
 
-async def save_chart(fig, filename):
-    await fig.write_image(filename)
-    st.success(f"Chart saved as {filename}")
+    async def update_price(self, price: float, timestamp: Optional[datetime] = None) -> None:
+        if timestamp is None:
+            timestamp = datetime.now()
+        self.price_history.append((timestamp, price))
+        self.current_price = price
 
-def display_trading_account_balance(bot: TradingBot):
-    trading_account_balance = bot.get_account_balance('USDT')
-    st.sidebar.info(f"Trading Account Balance: {trading_account_balance:.2f} USDT")
+    async def record_trade(self, amount: float, price: float, trade_type: str, timestamp: Optional[datetime] = None) -> None:
+        if timestamp is None:
+            timestamp = datetime.now()
+        
+        if trade_type == 'buy':
+            self.buy_history.append((timestamp, amount, price))
+            self.balance += amount
+        elif trade_type == 'sell':
+            self.sell_history.append((timestamp, amount, price))
+            self.balance -= amount
+        
+        logger.info(f"Recorded {trade_type}: {self.symbol} - Amount: {amount}, Price: {price}")
 
-async def main():
-    st.set_page_config(layout="wide")
-    st.title("Cryptocurrency Trading Bot")
+class Account:
+    def __init__(self, account_type: str, currencies: Optional[Dict[str, Currency]] = None):
+        self.account_type: str = account_type
+        self.currencies: Dict[str, Currency] = currencies or {}
 
-    config = await load_config()
-    await initialize_clients()
-    await initialize_session_state()
+    async def add_currency(self, symbol: str, balance: float = 0) -> None:
+        if symbol not in self.currencies:
+            self.currencies[symbol] = Currency(symbol, balance)
+            logger.info(f"Added currency {symbol} to account {self.account_type}")
 
-    if 'is_trading' not in st.session_state:
-        st.session_state.is_trading = False
-    if 'stop_event' not in st.session_state:
-        st.session_state.stop_event = None
-    if 'trading_task' not in st.session_state:
-        st.session_state.trading_task = None
-    if 'user_inputs' not in st.session_state:
-        st.session_state.user_inputs = {}
+    def get_currency_balance(self, symbol: str) -> float:
+        return self.currencies.get(symbol, Currency(symbol)).balance
 
-    sidebar_config = SidebarConfig(config)
-    is_simulation, simulated_usdt_balance = await sidebar_config.configure()
+    async def update_currency_balance(self, symbol: str, new_balance: float) -> None:
+        if symbol not in self.currencies:
+            await self.add_currency(symbol, new_balance)
+        else:
+            self.currencies[symbol].balance = new_balance
+        logger.info(f"Updated balance for {symbol} in account {self.account_type}: {new_balance}")
 
-    if is_simulation is not None:
-        try:
-            if not is_simulation:
-                live_trading_key = st.sidebar.text_input("Enter live trading access key", type="password")
-                if not verify_live_trading_access(live_trading_key):
-                    st.sidebar.error("Invalid live trading access key. Please try again.")
-                    return
+    async def update_currency_price(self, symbol: str, price: float) -> None:
+        if symbol in self.currencies:
+            await self.currencies[symbol].update_price(price)
+            logger.info(f"Updated price for {symbol} in account {self.account_type}: {price}")
+
+class Wallet:
+    def __init__(self, accounts: Optional[Dict[str, Account]] = None):
+        self.accounts: Dict[str, Account] = accounts or {}
+
+    async def add_account(self, account_type: str) -> None:
+        if account_type not in self.accounts:
+            self.accounts[account_type] = Account(account_type)
+            logger.info(f"Added account {account_type} to wallet")
+
+    def get_account(self, account_type: str) -> Optional[Account]:
+        return self.accounts.get(account_type)
+
+    async def get_total_balance_in_usdt(self, price_fetcher: Callable[[str], Optional[float]]) -> float:
+        total_usdt = 0
+        for account in self.accounts.values():
+            for currency in account.currencies.values():
+                if currency.symbol == 'USDT':
+                    total_usdt += currency.balance
                 else:
-                    bot = await initialize_bot(config, is_simulation, simulated_usdt_balance)
-                    display_trading_account_balance(bot)
-            else:
-                bot = await initialize_bot(config, is_simulation, simulated_usdt_balance)
-                display_trading_account_balance(bot)
+                    price = await price_fetcher(currency.symbol + '-USDT')
+                    if price is not None:
+                        total_usdt += currency.balance * price
+        return total_usdt
 
-            await SimulationIndicator(is_simulation).display()
+    async def update_account_balance(self, account_type: str, symbol: str, new_balance: float) -> None:
+        if account_type not in self.accounts:
+            await self.add_account(account_type)
+        await self.accounts[account_type].update_currency_balance(symbol, new_balance)
 
-            available_symbols = await get_available_trading_symbols()
-            if not available_symbols:
-                st.warning("No available trading symbols found. Please check your KuCoin API connection.")
-                return
-            
-            symbol_selector = SymbolSelector(available_symbols, config['default_trading_symbols'])
-            user_selected_symbols = await symbol_selector.display()
+    async def update_currency_price(self, account_type: str, symbol: str, price: float) -> None:
+        if account_type in self.accounts:
+            await self.accounts[account_type].update_currency_price(symbol, price)
 
-            if not user_selected_symbols:
-                st.warning("Please select at least one symbol to trade.")
-                return
-
-            trading_params = TradingParameters(config)
-            usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade = await trading_params.display()
-
-            # Inform users about the total fees and suggest a higher profit margin
-            st.sidebar.info("Please note that the total fees for buying and selling are 0.2%. It is recommended to set a profit margin higher than 0.2% to cover the fees.")
-
-            # Save user inputs
-            st.session_state.user_inputs = {
-                'user_selected_symbols': user_selected_symbols,
-                'usdt_liquid_percentage': usdt_liquid_percentage,
-                'profit_margin_percentage': profit_margin_percentage,
-                'num_orders_per_trade': num_orders_per_trade
+    def get_account_summary(self) -> Dict[str, Dict[str, Dict[str, float]]]:
+        summary = {}
+        for account_type, account in self.accounts.items():
+            summary[account_type] = {
+                symbol: {
+                    'balance': currency.balance,
+                    'current_price': currency.current_price
+                } for symbol, currency in account.currencies.items()
             }
+        return summary
 
-            bot.usdt_liquid_percentage = usdt_liquid_percentage
+    def get_currency_history(self, account_type: str, symbol: str) -> Optional[Dict[str, List[Tuple[datetime, float]]]]:
+        account = self.get_account(account_type)
+        if account and symbol in account.currencies:
+            currency = account.currencies[symbol]
+            return {
+                'price_history': currency.price_history,
+                'buy_history': currency.buy_history,
+                'sell_history': currency.sell_history
+            }
+        return None
 
-            bot.symbol_allocations, tradable_usdt_amount = await bot.get_user_allocations(user_selected_symbols, bot.get_account_balance('USDT'))
-            if tradable_usdt_amount <= 0:
-                st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
-                return
+    async def record_trade(self, account_type: str, symbol: str, amount: float, price: float, trade_type: str) -> None:
+        account = self.get_account(account_type)
+        if account and symbol in account.currencies:
+            currency = account.currencies[symbol]
+            await currency.record_trade(amount, price, trade_type)
+            
+            # Update USDT balance
+            usdt_amount = amount * price
+            if trade_type == 'buy':
+                await self.update_account_balance(account_type, 'USDT', self.get_currency_balance(account_type, 'USDT') - usdt_amount)
+            elif trade_type == 'sell':
+                await self.update_account_balance(account_type, 'USDT', self.get_currency_balance(account_type, 'USDT') + usdt_amount)
+        else:
+            logger.warning(f"Failed to record trade: Account {account_type} or currency {symbol} not found")
 
-            st.sidebar.info(f"Tradable USDT Amount: {tradable_usdt_amount:.2f}")
+    def get_currency_balance(self, account_type: str, symbol: str) -> float:
+        account = self.get_account(account_type)
+        if account:
+            return account.get_currency_balance(symbol)
+        return 0
 
-            trading_controls = TradingControls(config)
-            start_button, stop_button = await trading_controls.display()
+    def get_all_currency_balances(self, account_type: str) -> Dict[str, float]:
+        account = self.get_account(account_type)
+        if account:
+            return {symbol: currency.balance for symbol, currency in account.currencies.items()}
+        return {}
 
-            chart_container = st.empty()
-            table_container = st.empty()
-            trade_messages = st.empty()
-            error_placeholder = st.empty()
+    async def transfer_between_accounts(self, from_account: str, to_account: str, symbol: str, amount: float) -> bool:
+        from_acc = self.get_account(from_account)
+        to_acc = self.get_account(to_account)
 
-            if start_button and not st.session_state.is_trading:
-                st.session_state.is_trading = True
-                st.session_state.stop_event, st.session_state.trading_task = await initialize_trading_loop(
-                    bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade
-                )
+        if from_acc and to_acc:
+            if from_acc.get_currency_balance(symbol) >= amount:
+                await from_acc.update_currency_balance(symbol, from_acc.get_currency_balance(symbol) - amount)
+                await to_acc.update_currency_balance(symbol, to_acc.get_currency_balance(symbol) + amount)
+                logger.info(f"Transferred {amount} {symbol} from {from_account} to {to_account}")
+                return True
+            else:
+                logger.warning(f"Insufficient balance for transfer: {symbol} in {from_account}")
+        else:
+            logger.warning(f"Transfer failed: Account {from_account} or {to_account} not found")
+        return False
 
-            if st.session_state.is_trading:
-                chart_creator = ChartCreator(bot)
-                chart_display = ChartDisplay(chart_container)
-                last_update_time = datetime.now() - timedelta(seconds=31)  # Ensure first update happens immediately
-
-                try:
-                    current_time = datetime.now()
-                    if (current_time - last_update_time).total_seconds() >= 30:
-                        charts = await chart_creator.create_charts_async()
-                        await chart_display.display(charts)
-
-                        with table_container.container():
-                            current_prices = await fetch_real_time_prices(user_selected_symbols)
-                            current_status = bot.get_current_status(current_prices)
-                            await StatusTable(table_container, bot, user_selected_symbols).display(current_status)
-
-                        await TradeMessages(trade_messages).display()
-
-                        last_update_time = current_time
-
-                except Exception as e:
-                    logger.error(f"An error occurred in the main loop: {e}")
-                    st.error(f"An error occurred: {e}")
-
-            if stop_button or (not st.session_state.is_trading and st.session_state.stop_event):
-                st.session_state.is_trading = False
-                if st.session_state.stop_event and st.session_state.trading_task:
-                    await stop_trading_loop(st.session_state.stop_event, st.session_state.trading_task)
-                    st.session_state.stop_event = None
-                    st.session_state.trading_task = None
-                st.sidebar.success("Trading stopped.")
-                chart_container.empty()
-                table_container.empty()
-
-        except Exception as e:
-            logger.error(f"An error occurred during bot initialization: {e}")
-            st.error(f"An error occurred during bot initialization: {e}")
-
-    await ErrorMessage(error_placeholder).display()
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    async def update_wallet_state(self, account_type: str, symbol: str, amount: float, price: float, trade_type: str) -> None:
+        """
+        Updates the wallet state after a trade (real or simulated).
+        """
+        await self.record_trade(account_type, symbol, amount, price, trade_type)
+        await self.update_currency_price(account_type, symbol, price)
