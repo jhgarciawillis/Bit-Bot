@@ -173,3 +173,23 @@ class TradingParameters:
         )
 
         return usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade
+
+class ChartDisplay:
+    def __init__(self, chart_placeholder: st.empty):
+        self.chart_placeholder = chart_placeholder
+
+    async def display(self, charts: Dict[str, Any]) -> None:
+        with self.chart_placeholder.container():
+            for symbol, chart in charts['individual_price_charts'].items():
+                st.plotly_chart(chart, use_container_width=True)
+            st.plotly_chart(charts['total_profit'], use_container_width=True)
+
+class SimulationIndicator:
+    def __init__(self, is_simulation: bool):
+        self.is_simulation = is_simulation
+
+    async def display(self) -> None:
+        if self.is_simulation:
+            st.sidebar.warning("Running in Simulation Mode")
+        else:
+            st.sidebar.success("Running in Live Trading Mode")
