@@ -1,7 +1,10 @@
 from datetime import datetime
-from typing import Dict, List, Tuple, Callable, Optional
+from typing import Dict, List, Tuple, Optional
 import logging
 import asyncio
+from kucoin.client import Client
+from kucoin.exceptions import KucoinAPIException
+from config import kucoin_client_manager
 
 logger = logging.getLogger(__name__)
 
@@ -70,16 +73,22 @@ class Wallet:
     def get_account(self, account_type: str) -> Optional[Account]:
         return self.accounts.get(account_type)
 
-    async def get_total_balance_in_usdt(self, price_fetcher: Callable[[str], Optional[float]]) -> float:
+    async def get_total_balance_in_usdt(self) -> float:
         total_usdt = 0
-        for account in self.accounts.values():
-            for currency in account.currencies.values():
-                if currency.symbol == 'USDT':
-                    total_usdt += currency.balance
-                else:
-                    price = await price_fetcher(currency.symbol + '-USDT')
-                    if price is not None:
+        try:
+            client = kucoin_client_manager.get_client()
+            for account in self.accounts.values():
+                for currency in account.currencies.values():
+                    if currency.symbol == 'USDT':
+                        total_usdt += currency.balance
+                    else:
+                        ticker = await asyncio.to_thread(client.get_ticker, f"{currency.symbol}-USDT")
+                        price = float(ticker['price'])
                         total_usdt += currency.balance * price
+        except KucoinAPIException as e:
+            logger.error(f"KuCoin API error fetching total balance: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error fetching total balance: {e}")
         return total_usdt
 
     async def update_account_balance(self, account_type: str, symbol: str, new_balance: float) -> None:
@@ -162,3 +171,44 @@ class Wallet:
         """
         await self.record_trade(account_type, symbol, amount, price, trade_type)
         await self.update_currency_price(account_type, symbol, price)
+
+    async def sync_with_exchange(self, account_type: str) -> None:
+        """
+        Synchronizes the wallet balances with the actual exchange balances.
+        """
+        try:
+            client = kucoin_client_manager.get_client()
+            accounts = await asyncio.to_thread(client.get_accounts)
+            for account in accounts:
+                if account['type'] == account_type:
+                    symbol = account['currency']
+                    balance = float(account['balance'])
+                    await self.update_account_balance(account_type, symbol, balance)
+            logger.info(f"Wallet synchronized with exchange for account type: {account_type}")
+        except KucoinAPIException as e:
+            logger.error(f"KuCoin API error synchronizing wallet: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error synchronizing wallet: {e}")
+
+async def create_wallet() -> Wallet:
+    """
+    Creates and initializes a new Wallet instance.
+    """
+    wallet = Wallet()
+    await wallet.add_account("trading")
+    await wallet.sync_with_exchange("trade")
+    return wallet
+
+if __name__ == "__main__":
+    # This block allows running wallet-related functions independently for testing
+    async def run_tests():
+        wallet = await create_wallet()
+        print("Wallet created and synchronized with exchange")
+        
+        total_balance = await wallet.get_total_balance_in_usdt()
+        print(f"Total balance in USDT: {total_balance}")
+        
+        account_summary = wallet.get_account_summary()
+        print("Account summary:", account_summary)
+
+    asyncio.run(run_tests())
