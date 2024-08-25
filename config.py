@@ -5,7 +5,7 @@ import yaml
 import streamlit as st
 import asyncio
 import random
-from kucoin.client import Client
+from kucoin.client import Market, Trade, User
 from kucoin.exceptions import KucoinAPIException
 
 # Set up logging
@@ -52,16 +52,25 @@ class KucoinClientManager:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(KucoinClientManager, cls).__new__(cls)
-            cls._instance.client = None
+            cls._instance.market_client = None
+            cls._instance.trade_client = None
+            cls._instance.user_client = None
         return cls._instance
 
     async def initialize(self, api_key: str, api_secret: str, api_passphrase: str) -> None:
-        self.client = Client(api_key, api_secret, api_passphrase)
+        self.market_client = Market(key=api_key, secret=api_secret, passphrase=api_passphrase)
+        self.trade_client = Trade(key=api_key, secret=api_secret, passphrase=api_passphrase)
+        self.user_client = User(key=api_key, secret=api_secret, passphrase=api_passphrase)
 
-    def get_client(self) -> Client:
-        if self.client is None:
-            raise ValueError("KuCoin client has not been initialized")
-        return self.client
+    def get_client(self, client_type: type) -> Any:
+        if client_type == Market:
+            return self.market_client
+        elif client_type == Trade:
+            return self.trade_client
+        elif client_type == User:
+            return self.user_client
+        else:
+            raise ValueError(f"Unknown client type: {client_type}")
 
 kucoin_client_manager = KucoinClientManager()
 
@@ -140,8 +149,8 @@ async def validate_default_trading_symbols(config: Dict[str, Any]) -> Dict[str, 
 async def get_available_trading_symbols(config: Dict[str, Any]) -> List[str]:
     """Fetch available trading symbols from KuCoin API asynchronously."""
     try:
-        client = kucoin_client_manager.get_client()
-        symbols = await asyncio.to_thread(client.get_symbols)
+        market_client = kucoin_client_manager.get_client(Market)
+        symbols = await asyncio.to_thread(market_client.get_symbol_list)
         available_symbols = [symbol['symbol'] for symbol in symbols if symbol['quoteCurrency'] == 'USDT']
         return available_symbols
     except KucoinAPIException as e:
@@ -178,9 +187,9 @@ async def fetch_real_time_prices(symbols: List[str], is_simulation: bool = False
                 price_change = random.uniform(-0.001, 0.001)  # -0.1% to 0.1% change
                 prices[symbol] = round(base_price * (1 + price_change), 2)
         else:
-            client = kucoin_client_manager.get_client()
+            market_client = kucoin_client_manager.get_client(Market)
             for symbol in symbols:
-                ticker = await asyncio.to_thread(client.get_ticker, symbol)
+                ticker = await asyncio.to_thread(market_client.get_ticker, symbol)
                 prices[symbol] = float(ticker['price'])
         logger.info(f"Fetched {'simulated' if is_simulation else 'real-time'} prices: {prices}")
     except KucoinAPIException as e:
@@ -212,9 +221,9 @@ async def place_spot_order(symbol: str, side: str, price: float, size: float, is
                 'fee': size * price * 0.001  # Simulated 0.1% fee
             }
         else:
-            client = kucoin_client_manager.get_client()
+            trade_client = kucoin_client_manager.get_client(Trade)
             order = await asyncio.to_thread(
-                client.create_limit_order,
+                trade_client.create_limit_order,
                 symbol=symbol,
                 side=side,
                 price=str(price),
