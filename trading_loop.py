@@ -3,7 +3,7 @@ import streamlit as st
 from typing import List, Tuple
 from trading_bot import TradingBot
 import logging
-from config import load_config
+from config import load_config, fetch_real_time_prices
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ async def update_trading_status(bot: TradingBot, chosen_symbols: List[str]) -> N
     :param bot: TradingBot instance
     :param chosen_symbols: List of trading symbols
     """
-    current_prices = await bot.get_current_prices(chosen_symbols)
+    current_prices = await fetch_real_time_prices(chosen_symbols, bot.is_simulation)
     current_status = bot.get_current_status(current_prices)
 
     # Update Streamlit display with current status
