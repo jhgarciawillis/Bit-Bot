@@ -116,6 +116,9 @@ async def main():
             trading_controls = TradingControls(config)
             start_button, stop_button = await trading_controls.display()
 
+            chart_container = st.empty()
+            table_container = st.empty()
+            trade_messages = st.empty()
             error_placeholder = st.empty()
 
             if start_button and not st.session_state.is_trading:
@@ -126,7 +129,7 @@ async def main():
 
             if st.session_state.is_trading:
                 chart_creator = ChartCreator(bot)
-                chart_display = ChartDisplay(st.empty())
+                chart_display = ChartDisplay(chart_container, table_container)
                 last_update_time = datetime.now() - timedelta(seconds=31)  # Ensure first update happens immediately
 
                 try:
@@ -135,12 +138,12 @@ async def main():
                         charts = await chart_creator.create_charts_async()
                         await chart_display.display(charts)
 
-                        with st.container():
+                        with table_container.container():
                             current_prices = await fetch_real_time_prices(user_selected_symbols, is_simulation)
                             current_status = bot.get_current_status(current_prices)
-                            await StatusTable(st, bot, user_selected_symbols).display(current_status)
+                            await StatusTable(table_container, bot, user_selected_symbols).display(current_status)
 
-                        await TradeMessages(st.empty()).display()
+                        await TradeMessages(trade_messages).display()
 
                         last_update_time = current_time
 
@@ -154,7 +157,8 @@ async def main():
                     st.session_state.stop_event = None
                     st.session_state.trading_task = None
                 st.sidebar.success("Trading stopped.")
-                chart_display.empty()
+                chart_container.empty()
+                table_container.empty()
 
     except Exception as e:
         await display_error_message(error_placeholder, e)
