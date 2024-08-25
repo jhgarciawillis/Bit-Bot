@@ -16,11 +16,7 @@ logger = logging.getLogger(__name__)
 
 async def initialize_bot(config: Dict[str, Any], is_simulation: bool, simulated_usdt_balance: float = 0) -> TradingBot:
     logger.info("Initializing bot...")
-    api_key = config['api_key']
-    api_secret = config['api_secret']
-    api_passphrase = config['api_passphrase']
-    
-    bot = TradingBot(api_key, api_secret, api_passphrase, config['bot_config']['update_interval'])
+    bot = await TradingBot.create(config['bot_config']['update_interval'])
     bot.is_simulation = is_simulation
     
     if is_simulation:
@@ -75,11 +71,8 @@ async def main():
                 if not await live_trading_verification.verify():
                     return
             
-            logger.info("Creating wallet...")
-            wallet = await create_wallet()
             logger.info("Initializing bot...")
             bot = await initialize_bot(config, is_simulation, simulated_usdt_balance)
-            bot.wallet = wallet
 
             logger.info("Displaying wallet balance...")
             wallet_balance = WalletBalance(bot)
