@@ -28,7 +28,6 @@ class TradingBot:
         self.api_secret = api_secret
         self.api_passphrase = api_passphrase
         self.wallet = Wallet()
-        self.wallet.add_account("trading")
         self.is_simulation = self.config['simulation_mode']['enabled']
         self.update_interval = update_interval
         self.profits: Dict[str, float] = {}
@@ -43,6 +42,7 @@ class TradingBot:
         self.status_history: List[Dict] = []
 
     async def initialize(self) -> None:
+        await self.wallet.add_account("trading")
         if not self.is_simulation:
             await self.update_wallet_balances()
 
@@ -59,10 +59,10 @@ class TradingBot:
                 logger.error(f"Error updating wallet balances: {e}")
 
     def get_account_balance(self, currency: str = 'USDT') -> float:
-        return self.wallet.get_account("trading").get_currency_balance(currency)
+        return self.wallet.get_currency_balance("trading", currency)
 
     def get_tradable_balance(self, currency: str = 'USDT') -> float:
-        return self.wallet.get_account("trading").get_currency_balance(currency)
+        return self.wallet.get_currency_balance("trading", currency)
 
     async def get_user_allocations(self, user_selected_symbols: List[str], total_usdt_balance: float) -> Tuple[Dict[str, float], float]:
         tradable_usdt_amount = total_usdt_balance * (1 - self.usdt_liquid_percentage)
@@ -114,6 +114,7 @@ class TradingBot:
                 'fee': float(order['fee']),
                 'buy_time': datetime.now()
             }
+            await self.wallet.update_wallet_state("trading", symbol, float(order['amount']), float(order['price']), 'buy')
             return order
         return None
 
@@ -122,11 +123,12 @@ class TradingBot:
         order = await place_spot_order(symbol, 'sell', target_sell_price, amount_crypto, self.is_simulation)
         
         if order:
+            await self.wallet.update_wallet_state("trading", symbol, float(order['amount']), float(order['price']), 'sell')
             return order
         return None
 
     def get_current_status(self, prices: Dict[str, float]) -> Dict:
-        current_total_usdt = self.wallet.get_total_balance_in_usdt(lambda symbol: prices.get(symbol))
+        current_total_usdt = asyncio.run(self.wallet.get_total_balance_in_usdt(lambda symbol: prices.get(symbol.split('-')[0], None)))
         liquid_usdt = current_total_usdt * self.usdt_liquid_percentage
         tradable_usdt = max(current_total_usdt - liquid_usdt, 0)
         
