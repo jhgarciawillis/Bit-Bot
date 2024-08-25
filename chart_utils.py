@@ -61,7 +61,7 @@ class ChartCreator:
         active_trade = next((trade for trade in self.bot.active_trades.values() if trade['symbol'] == symbol), None)
         if active_trade:
             buy_price = active_trade['buy_price']
-            target_sell_price = active_trade['buy_price'] * (1 + self.bot.profits[symbol])
+            target_sell_price = buy_price * (1 + self.bot.profits.get(symbol, 0))
             fig.add_hline(y=buy_price, line_dash="dash", annotation_text="Buy Price", line_color="blue")
             fig.add_hline(y=target_sell_price, line_dash="dot", annotation_text="Target Sell Price", line_color="red")
 
