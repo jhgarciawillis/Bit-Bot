@@ -3,6 +3,9 @@ from trading_bot import TradingBot
 import pandas as pd
 from typing import Dict, List, Tuple, Any, Optional
 import asyncio
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SidebarConfig:
     def __init__(self, config: Dict[str, Any]):
@@ -31,14 +34,15 @@ class SidebarConfig:
             return is_simulation, None
 
 class StatusTable:
-    def __init__(self, status_table: st.delta_generator.DeltaGenerator, bot: TradingBot, chosen_symbols: List[str]):
-        self.status_table = status_table
+    def __init__(self, status_container: st.container, bot: TradingBot, chosen_symbols: List[str]):
+        self.status_container = status_container
         self.bot = bot
         self.chosen_symbols = chosen_symbols
 
     async def display(self, current_status: Dict[str, Any]) -> None:
         status_df = await self.create_status_dataframe(current_status)
-        self.status_table.table(status_df)
+        with self.status_container:
+            st.dataframe(status_df, use_container_width=True)
 
     async def create_status_dataframe(self, current_status: Dict[str, Any]) -> pd.DataFrame:
         status_df = await self.create_symbol_status_dataframe(current_status)
@@ -102,20 +106,22 @@ class StatusTable:
         return f"{profits.get(symbol, 0):.4f}"
 
 class TradeMessages:
-    def __init__(self, trade_messages: st.delta_generator.DeltaGenerator):
-        self.trade_messages = trade_messages
+    def __init__(self, trade_messages_container: st.container):
+        self.trade_messages_container = trade_messages_container
 
     async def display(self) -> None:
-        self.trade_messages.text("\n".join(st.session_state.trade_messages[-10:]))  # Display last 10 messages
+        with self.trade_messages_container:
+            st.text("\n".join(st.session_state.trade_messages[-10:]))  # Display last 10 messages
 
 class ErrorMessage:
-    def __init__(self, error_placeholder: st.empty):
-        self.error_placeholder = error_placeholder
+    def __init__(self, error_container: st.container):
+        self.error_container = error_container
 
     async def display(self) -> None:
-        if 'error_message' in st.session_state and st.session_state.error_message:
-            self.error_placeholder.error(st.session_state.error_message)
-            st.session_state.error_message = ""  # Clear the error message after displaying
+        with self.error_container:
+            if 'error_message' in st.session_state and st.session_state.error_message:
+                st.error(st.session_state.error_message)
+                st.session_state.error_message = ""  # Clear the error message after displaying
 
 async def initialize_session_state() -> None:
     if 'trade_messages' not in st.session_state:
@@ -175,11 +181,11 @@ class TradingParameters:
         return usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade
 
 class ChartDisplay:
-    def __init__(self, chart_placeholder: st.empty):
-        self.chart_placeholder = chart_placeholder
+    def __init__(self, chart_container: st.container):
+        self.chart_container = chart_container
 
     async def display(self, charts: Dict[str, Any]) -> None:
-        with self.chart_placeholder.container():
+        with self.chart_container:
             for symbol, chart in charts['individual_price_charts'].items():
                 st.plotly_chart(chart, use_container_width=True)
             st.plotly_chart(charts['total_profit'], use_container_width=True)
@@ -193,3 +199,24 @@ class SimulationIndicator:
             st.sidebar.warning("Running in Simulation Mode")
         else:
             st.sidebar.success("Running in Live Trading Mode")
+
+class WalletBalance:
+    def __init__(self, bot: TradingBot):
+        self.bot = bot
+
+    async def display(self) -> None:
+        trading_account_balance = await self.bot.get_account_balance('USDT')
+        st.sidebar.info(f"Trading Account Balance: {trading_account_balance:.2f} USDT")
+
+class LiveTradingVerification:
+    def __init__(self, config: Dict[str, Any]):
+        self.config = config
+
+    async def verify(self) -> bool:
+        live_trading_key = st.sidebar.text_input("Enter live trading access key", type="password")
+        if live_trading_key == self.config['live_trading_access_key']:
+            st.sidebar.success("Live trading access key verified.")
+            return True
+        else:
+            st.sidebar.error("Invalid live trading access key. Please try again.")
+            return False
