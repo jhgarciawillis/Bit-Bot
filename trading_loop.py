@@ -7,6 +7,17 @@ from config import load_config, fetch_real_time_prices
 
 logger = logging.getLogger(__name__)
 
+def handle_trading_errors(func):
+    async def wrapper(*args, **kwargs):
+        try:
+            return await func(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in {func.__name__}: {str(e)}")
+            if 'error_message' in st.session_state:
+                st.session_state.error_message = f"An error occurred: {str(e)}"
+    return wrapper
+
+@handle_trading_errors
 async def trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: float, num_orders: int, stop_event: asyncio.Event) -> None:
     """
     Main trading loop that runs continuously until stopped.
@@ -73,22 +84,6 @@ async def stop_trading_loop(stop_event: asyncio.Event, trading_task: asyncio.Tas
         logger.warning("Trading task did not stop within the timeout period.")
     else:
         logger.info("Trading loop stopped successfully.")
-
-def handle_trading_errors(func):
-    """
-    Decorator to handle errors in trading functions.
-
-    :param func: Function to decorate
-    :return: Wrapped function
-    """
-    async def wrapper(*args, **kwargs):
-        try:
-            return await func(*args, **kwargs)
-        except Exception as e:
-            logger.error(f"Error in {func.__name__}: {str(e)}")
-            if 'error_message' in st.session_state:
-                st.session_state.error_message = f"An error occurred in {func.__name__}: {str(e)}"
-    return wrapper
 
 @handle_trading_errors
 async def update_trading_status(bot: TradingBot, chosen_symbols: List[str]) -> None:
