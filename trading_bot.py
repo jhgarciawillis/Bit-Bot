@@ -3,17 +3,10 @@ import logging
 from datetime import datetime
 from collections import deque
 from statistics import mean, stdev
-import random
 from typing import Dict, List, Optional, Tuple
-from wallet import Wallet, Account, Currency
+from wallet import Wallet
 from config import load_config, fetch_real_time_prices, place_spot_order
 import asyncio
-
-try:
-    from kucoin.client import Market, Trade, User
-except ImportError as e:
-    logging.warning(f"KuCoin client import error: {type(e).__name__}")
-    Market, Trade, User = None, None, None
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -111,15 +104,7 @@ class TradingBot:
     @handle_trading_errors
     async def place_buy_order(self, symbol: str, amount_usdt: float, limit_price: float) -> Optional[Dict]:
         amount_crypto = amount_usdt / limit_price
-        if self.is_simulation:
-            order = {
-                'orderId': f'sim_buy_{symbol}_{time.time()}',
-                'price': limit_price,
-                'amount': amount_crypto,
-                'fee': amount_usdt * 0.001  # Simulated 0.1% fee
-            }
-        else:
-            order = await place_spot_order(symbol, 'buy', limit_price, amount_crypto)
+        order = await place_spot_order(symbol, 'buy', limit_price, amount_crypto, self.is_simulation)
         
         if order:
             self.active_trades[order['orderId']] = {
@@ -134,15 +119,7 @@ class TradingBot:
 
     @handle_trading_errors
     async def place_sell_order(self, symbol: str, amount_crypto: float, target_sell_price: float) -> Optional[Dict]:
-        if self.is_simulation:
-            order = {
-                'orderId': f'sim_sell_{symbol}_{time.time()}',
-                'price': target_sell_price,
-                'amount': amount_crypto,
-                'fee': amount_crypto * target_sell_price * 0.001  # Simulated 0.1% fee
-            }
-        else:
-            order = await place_spot_order(symbol, 'sell', target_sell_price, amount_crypto)
+        order = await place_spot_order(symbol, 'sell', target_sell_price, amount_crypto, self.is_simulation)
         
         if order:
             return order
@@ -191,7 +168,7 @@ class TradingBot:
 
     @handle_trading_errors
     async def run_trading_iteration(self, symbols: List[str], profit_margin: float, num_orders: int) -> Dict:
-        prices = await fetch_real_time_prices(symbols)
+        prices = await fetch_real_time_prices(symbols, self.is_simulation)
         await self.update_price_history(symbols, prices)
 
         current_status = self.get_current_status(prices)
