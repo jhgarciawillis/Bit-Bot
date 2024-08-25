@@ -1,28 +1,16 @@
 import os
 import logging
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import yaml
 import streamlit as st
 import asyncio
 import random
+from kucoin.client import Client
+from kucoin.exceptions import KucoinAPIException
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-
-# Try to import KuCoin client, handle potential import errors
-try:
-    from kucoin.client import Market, Trade, User
-    KUCOIN_IMPORT_SUCCESSFUL = True
-except ImportError:
-    logger.warning("Failed to import KuCoin client. Some features may not be available.")
-    KUCOIN_IMPORT_SUCCESSFUL = False
-    Market, Trade, User = None, None, None
-
-# Global variables
-market_client: Market = None
-trade_client: Trade = None
-user_client: User = None
 
 # Default trading symbols
 DEFAULT_TRADING_SYMBOLS: List[str] = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
@@ -31,65 +19,6 @@ DEFAULT_TRADING_SYMBOLS: List[str] = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-U
 DEFAULT_PROFIT_MARGIN: float = 0.01  # 1%
 DEFAULT_NUM_ORDERS: int = 1
 DEFAULT_USDT_LIQUID_PERCENTAGE: float = 0.5  # 50%
-
-async def initialize_clients() -> None:
-    """Initialize KuCoin API clients asynchronously."""
-    global market_client, trade_client, user_client
-
-    if not KUCOIN_IMPORT_SUCCESSFUL:
-        logger.error("KuCoin client import failed. Cannot initialize clients.")
-        return
-
-    try:
-        API_KEY = st.secrets["api_credentials"]["api_key"]
-        API_SECRET = st.secrets["api_credentials"]["api_secret"]
-        API_PASSPHRASE = st.secrets["api_credentials"]["api_passphrase"]
-        API_URL = 'https://api.kucoin.com'
-
-        if not all([API_KEY, API_SECRET, API_PASSPHRASE]):
-            raise ValueError("Missing KuCoin API credentials in Streamlit secrets")
-
-        market_client = await asyncio.to_thread(Market, url=API_URL)
-        trade_client = await asyncio.to_thread(Trade, key=API_KEY, secret=API_SECRET, passphrase=API_PASSPHRASE, url=API_URL)
-        user_client = await asyncio.to_thread(User, key=API_KEY, secret=API_SECRET, passphrase=API_PASSPHRASE, url=API_URL)
-        logger.info("Clients initialized successfully")
-    except Exception as e:
-        logger.error(f"Error initializing clients: {e}")
-        market_client = None
-        trade_client = None
-        user_client = None
-
-async def get_available_trading_symbols() -> List[str]:
-    """Fetch available trading symbols from KuCoin API asynchronously."""
-    try:
-        if market_client:
-            symbol_list = await asyncio.to_thread(market_client.get_symbol_list)
-            available_symbols = [item['symbol'] for item in symbol_list if isinstance(item, dict) and 'symbol' in item and item['symbol'].endswith('-USDT')]
-            return available_symbols  # Keep the '-USDT' suffix
-        else:
-            logger.warning("Market client not initialized. Using default trading symbols.")
-            return DEFAULT_TRADING_SYMBOLS
-    except Exception as e:
-        logger.error(f"Error fetching symbol list: {e}")
-        return DEFAULT_TRADING_SYMBOLS
-
-async def validate_default_trading_symbols(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate and update the default trading symbols in the configuration asynchronously."""
-    available_symbols = await get_available_trading_symbols()
-    default_trading_symbols = config.get('default_trading_symbols', DEFAULT_TRADING_SYMBOLS)
-
-    # Check if the default trading symbols are available
-    valid_default_symbols = [symbol for symbol in default_trading_symbols if symbol in available_symbols]
-
-    # If any default symbols are not available, use the available symbols instead
-    if len(valid_default_symbols) != len(default_trading_symbols):
-        logger.warning(f"Some default trading symbols are not available: {set(default_trading_symbols) - set(available_symbols)}")
-        logger.info(f"Using available trading symbols: {valid_default_symbols}")
-        config['default_trading_symbols'] = valid_default_symbols
-    else:
-        config['default_trading_symbols'] = default_trading_symbols
-
-    return config
 
 # Configuration for simulation mode
 SIMULATION_MODE: Dict[str, Any] = {
@@ -117,6 +46,25 @@ ERROR_CONFIG: Dict[str, Any] = {
     'retry_delay': 5,  # in seconds
 }
 
+class KucoinClientManager:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(KucoinClientManager, cls).__new__(cls)
+            cls._instance.client = None
+        return cls._instance
+
+    async def initialize(self, api_key: str, api_secret: str, api_passphrase: str) -> None:
+        self.client = Client(api_key, api_secret, api_passphrase)
+
+    def get_client(self) -> Client:
+        if self.client is None:
+            raise ValueError("KuCoin client has not been initialized")
+        return self.client
+
+kucoin_client_manager = KucoinClientManager()
+
 async def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
     """
     Load configuration from a YAML file and Streamlit secrets asynchronously.
@@ -133,11 +81,11 @@ async def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
         config = {}
 
     # Override with Streamlit secrets
-    config['api_url'] = 'https://api.kucoin.com'
+    config['api_url'] = st.secrets["api_credentials"]["api_url"]
     config['api_key'] = st.secrets["api_credentials"]["api_key"]
     config['api_secret'] = st.secrets["api_credentials"]["api_secret"]
     config['api_passphrase'] = st.secrets["api_credentials"]["api_passphrase"]
-    config['live_trading_access_key'] = st.secrets["api_credentials"]["perso_key"]
+    config['live_trading_access_key'] = st.secrets["api_credentials"]["live_trading_access_key"]
     
     # Merge with default configurations
     config['simulation_mode'] = {**SIMULATION_MODE, **config.get('simulation_mode', {})}
@@ -171,6 +119,38 @@ async def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
 
     return config
 
+async def validate_default_trading_symbols(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and update the default trading symbols in the configuration asynchronously."""
+    available_symbols = await get_available_trading_symbols(config)
+    default_trading_symbols = config.get('default_trading_symbols', DEFAULT_TRADING_SYMBOLS)
+
+    # Check if the default trading symbols are available
+    valid_default_symbols = [symbol for symbol in default_trading_symbols if symbol in available_symbols]
+
+    # If any default symbols are not available, use the available symbols instead
+    if len(valid_default_symbols) != len(default_trading_symbols):
+        logger.warning(f"Some default trading symbols are not available: {set(default_trading_symbols) - set(available_symbols)}")
+        logger.info(f"Using available trading symbols: {valid_default_symbols}")
+        config['default_trading_symbols'] = valid_default_symbols
+    else:
+        config['default_trading_symbols'] = default_trading_symbols
+
+    return config
+
+async def get_available_trading_symbols(config: Dict[str, Any]) -> List[str]:
+    """Fetch available trading symbols from KuCoin API asynchronously."""
+    try:
+        client = kucoin_client_manager.get_client()
+        symbols = await asyncio.to_thread(client.get_symbols)
+        available_symbols = [symbol['symbol'] for symbol in symbols if symbol['quoteCurrency'] == 'USDT']
+        return available_symbols
+    except KucoinAPIException as e:
+        logger.error(f"Error fetching symbol list from KuCoin API: {e}")
+        return DEFAULT_TRADING_SYMBOLS
+    except Exception as e:
+        logger.error(f"Unexpected error fetching symbol list: {e}")
+        return DEFAULT_TRADING_SYMBOLS
+
 def verify_live_trading_access(input_key: str) -> bool:
     """
     Verify the live trading access key.
@@ -178,7 +158,7 @@ def verify_live_trading_access(input_key: str) -> bool:
     :param input_key: The key input by the user
     :return: Boolean indicating whether the key is correct
     """
-    correct_key = st.secrets["api_credentials"]["perso_key"]
+    correct_key = st.secrets["api_credentials"]["live_trading_access_key"]
     return input_key == correct_key
 
 async def fetch_real_time_prices(symbols: List[str], is_simulation: bool = False) -> Dict[str, float]:
@@ -198,12 +178,15 @@ async def fetch_real_time_prices(symbols: List[str], is_simulation: bool = False
                 price_change = random.uniform(-0.001, 0.001)  # -0.1% to 0.1% change
                 prices[symbol] = round(base_price * (1 + price_change), 2)
         else:
+            client = kucoin_client_manager.get_client()
             for symbol in symbols:
-                ticker = await asyncio.to_thread(market_client.get_ticker, symbol)
+                ticker = await asyncio.to_thread(client.get_ticker, symbol)
                 prices[symbol] = float(ticker['price'])
         logger.info(f"Fetched {'simulated' if is_simulation else 'real-time'} prices: {prices}")
+    except KucoinAPIException as e:
+        logger.error(f"KuCoin API error fetching {'simulated' if is_simulation else 'real-time'} prices: {e}")
     except Exception as e:
-        logger.error(f"Error fetching {'simulated' if is_simulation else 'real-time'} prices: {e}")
+        logger.error(f"Unexpected error fetching {'simulated' if is_simulation else 'real-time'} prices: {e}")
     return prices
 
 async def place_spot_order(symbol: str, side: str, price: float, size: float, is_simulation: bool = False) -> Dict[str, Any]:
@@ -229,8 +212,9 @@ async def place_spot_order(symbol: str, side: str, price: float, size: float, is
                 'fee': size * price * 0.001  # Simulated 0.1% fee
             }
         else:
+            client = kucoin_client_manager.get_client()
             order = await asyncio.to_thread(
-                trade_client.create_limit_order,
+                client.create_limit_order,
                 symbol=symbol,
                 side=side,
                 price=str(price),
@@ -238,6 +222,29 @@ async def place_spot_order(symbol: str, side: str, price: float, size: float, is
             )
         logger.info(f"Placed {'simulated' if is_simulation else 'real'} {side} order for {symbol}: {order}")
         return order
-    except Exception as e:
-        logger.error(f"Error placing {'simulated' if is_simulation else 'real'} {side} order for {symbol}: {e}")
+    except KucoinAPIException as e:
+        logger.error(f"KuCoin API error placing {'simulated' if is_simulation else 'real'} {side} order for {symbol}: {e}")
         return {}
+    except Exception as e:
+        logger.error(f"Unexpected error placing {'simulated' if is_simulation else 'real'} {side} order for {symbol}: {e}")
+        return {}
+
+async def initialize_kucoin_client(config: Dict[str, Any]) -> None:
+    """Initialize the KuCoin client with the provided credentials."""
+    await kucoin_client_manager.initialize(config['api_key'], config['api_secret'], config['api_passphrase'])
+
+if __name__ == "__main__":
+    # This block allows running config-related functions independently for testing
+    async def run_tests():
+        config = await load_config()
+        print("Loaded configuration:", config)
+        
+        await initialize_kucoin_client(config)
+        
+        symbols = await get_available_trading_symbols(config)
+        print("Available trading symbols:", symbols)
+        
+        prices = await fetch_real_time_prices(config['default_trading_symbols'], is_simulation=False)
+        print("Fetched real-time prices:", prices)
+
+    asyncio.run(run_tests())
