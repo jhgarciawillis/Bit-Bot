@@ -6,8 +6,8 @@ from typing import Dict, Any
 from trading_bot import TradingBot
 from chart_utils import ChartCreator
 from trading_loop import initialize_trading_loop, stop_trading_loop
-from ui_components import StatusTable, TradeMessages, ErrorMessage, initialize_session_state, SidebarConfig, SymbolSelector, TradingParameters, TradingControls
-from config import load_config, initialize_clients, get_available_trading_symbols, verify_live_trading_access
+from ui_components import StatusTable, TradeMessages, ErrorMessage, initialize_session_state, SidebarConfig, SymbolSelector, TradingParameters, TradingControls, ChartDisplay, SimulationIndicator
+from config import load_config, initialize_clients, get_available_trading_symbols, verify_live_trading_access, fetch_real_time_prices
 from wallet import Wallet
 
 # Set up logging
@@ -71,6 +71,8 @@ async def main():
                 bot = await initialize_bot(config, is_simulation, simulated_usdt_balance)
                 display_trading_account_balance(bot)
 
+            await SimulationIndicator(is_simulation).display()
+
             available_symbols = await get_available_trading_symbols()
             if not available_symbols:
                 st.warning("No available trading symbols found. Please check your KuCoin API connection.")
@@ -122,26 +124,17 @@ async def main():
 
             if st.session_state.is_trading:
                 chart_creator = ChartCreator(bot)
+                chart_display = ChartDisplay(chart_container)
                 last_update_time = datetime.now() - timedelta(seconds=31)  # Ensure first update happens immediately
 
                 try:
                     current_time = datetime.now()
                     if (current_time - last_update_time).total_seconds() >= 30:
-                        with chart_container.container():
-                            charts = await chart_creator.create_charts_async()
-                            price_chart = st.plotly_chart(charts['price_buy_target'], use_container_width=True)
-                            profit_chart = st.plotly_chart(charts['total_profit'], use_container_width=True)
-
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                if st.button('Save Price Chart'):
-                                    await save_chart(charts['price_buy_target'], 'price_chart.png')
-                            with col2:
-                                if st.button('Save Profit Chart'):
-                                    await save_chart(charts['total_profit'], 'profit_chart.png')
+                        charts = await chart_creator.create_charts_async()
+                        await chart_display.display(charts)
 
                         with table_container.container():
-                            current_prices = await bot.trading_client.get_current_prices(user_selected_symbols)
+                            current_prices = await fetch_real_time_prices(user_selected_symbols, is_simulation)
                             current_status = bot.get_current_status(current_prices)
                             await StatusTable(table_container, bot, user_selected_symbols).display(current_status)
 
