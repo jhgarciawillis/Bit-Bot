@@ -52,8 +52,7 @@ async def get_available_trading_symbols() -> List[str]:
         if market_client:
             symbol_list = await asyncio.to_thread(market_client.get_symbol_list)
             available_symbols = [item['symbol'] for item in symbol_list if isinstance(item, dict) and 'symbol' in item and item['symbol'].endswith('-USDT')]
-            available_symbols = [symbol.replace('-USDT', '') for symbol in available_symbols]
-            return available_symbols
+            return available_symbols  # Keep the '-USDT' suffix
         else:
             logger.warning("Market client not initialized. Using default trading symbols.")
             return DEFAULT_TRADING_SYMBOLS
@@ -171,3 +170,44 @@ def verify_live_trading_access(input_key: str) -> bool:
     """
     correct_key = st.secrets["api_credentials"]["perso_key"]
     return input_key == correct_key
+
+async def fetch_real_time_prices(symbols: List[str]) -> Dict[str, float]:
+    """
+    Fetch real-time prices for the given symbols using KuCoin API.
+    
+    :param symbols: List of trading symbols
+    :return: Dictionary of symbol prices
+    """
+    prices = {}
+    try:
+        for symbol in symbols:
+            ticker = await asyncio.to_thread(market_client.get_ticker, symbol)
+            prices[symbol] = float(ticker['price'])
+        logger.info(f"Fetched real-time prices: {prices}")
+    except Exception as e:
+        logger.error(f"Error fetching real-time prices: {e}")
+    return prices
+
+async def place_spot_order(symbol: str, side: str, price: float, size: float) -> Dict[str, Any]:
+    """
+    Place a spot order on KuCoin.
+    
+    :param symbol: Trading symbol
+    :param side: 'buy' or 'sell'
+    :param price: Order price
+    :param size: Order size
+    :return: Order details
+    """
+    try:
+        order = await asyncio.to_thread(
+            trade_client.create_limit_order,
+            symbol=symbol,
+            side=side,
+            price=str(price),
+            size=str(size)
+        )
+        logger.info(f"Placed {side} order for {symbol}: {order}")
+        return order
+    except Exception as e:
+        logger.error(f"Error placing {side} order for {symbol}: {e}")
+        return {}
