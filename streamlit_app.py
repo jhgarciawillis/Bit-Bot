@@ -3,7 +3,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any
-from trading_bot import TradingBot
+from trading_bot import TradingBot, create_trading_bot
 from chart_utils import ChartCreator
 from trading_loop import initialize_trading_loop, stop_trading_loop
 from ui_components import StatusTable, TradeMessages, ErrorMessage, initialize_session_state, SidebarConfig, SymbolSelector, TradingParameters, TradingControls, ChartDisplay, SimulationIndicator, WalletBalance, LiveTradingVerification
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 async def initialize_bot(config: Dict[str, Any], is_simulation: bool, simulated_usdt_balance: float = 0) -> TradingBot:
     logger.info("Initializing bot...")
-    bot = await TradingBot.create(config['bot_config']['update_interval'])
+    bot = await create_trading_bot(config['bot_config']['update_interval'])
     bot.is_simulation = is_simulation
     
     if is_simulation:
