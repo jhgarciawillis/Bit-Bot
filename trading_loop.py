@@ -40,7 +40,7 @@ class TradingLoop:
 
     @handle_trading_errors
     async def trading_iteration(self) -> None:
-        current_prices = await fetch_real_time_prices(self.chosen_symbols, self.bot.is_simulation)
+        current_prices = await fetch_real_time_prices(self.chosen_symbols)
         
         for symbol in self.chosen_symbols:
             await self.process_symbol(symbol, current_prices[symbol])
@@ -53,7 +53,7 @@ class TradingLoop:
             logger.warning(f"No price data available for {symbol}")
             return
 
-        await self.bot.update_price_history(symbol, current_price)
+        await self.bot.update_price_history([symbol], {symbol: current_price})
 
         if symbol not in self.bot.active_trades:
             await self.check_buy_condition(symbol, current_price)
@@ -64,7 +64,7 @@ class TradingLoop:
     async def check_buy_condition(self, symbol: str, current_price: float) -> None:
         should_buy = await self.bot.should_buy(symbol, current_price)
         if should_buy is not None:
-            usdt_balance = await self.bot.get_tradable_balance('USDT')
+            usdt_balance = self.bot.get_tradable_balance('USDT')
             allocated_value = self.bot.symbol_allocations.get(symbol, 0) * usdt_balance
             if allocated_value > 0:
                 order_amount = allocated_value / self.num_orders
@@ -75,19 +75,20 @@ class TradingLoop:
 
     @handle_trading_errors
     async def check_sell_condition(self, symbol: str, current_price: float) -> None:
-        active_trade = self.bot.active_trades[symbol]
-        target_sell_price = active_trade['buy_price'] * (1 + self.profit_margin)
-        if current_price >= target_sell_price:
-            sell_amount = active_trade['amount']
-            sell_order = await self.bot.place_sell_order(symbol, sell_amount, current_price)
-            if sell_order:
-                profit = (current_price - active_trade['buy_price']) * sell_amount - active_trade['fee'] - float(sell_order['fee'])
-                self.bot.profits[symbol] = self.bot.profits.get(symbol, 0) + profit
-                self.bot.total_profit += profit
-                self.bot.total_trades += 1
-                self.bot.avg_profit_per_trade = self.bot.total_profit / self.bot.total_trades
-                logger.info(f"Sold {symbol}: {sell_amount:.8f} at {current_price:.4f}, Profit: {profit:.4f} USDT")
-                del self.bot.active_trades[symbol]
+        active_trade = next((trade for trade in self.bot.active_trades.values() if trade['symbol'] == symbol), None)
+        if active_trade:
+            target_sell_price = active_trade['buy_price'] * (1 + self.profit_margin)
+            if current_price >= target_sell_price:
+                sell_amount = active_trade['amount']
+                sell_order = await self.bot.place_sell_order(symbol, sell_amount, current_price)
+                if sell_order:
+                    profit = (current_price - active_trade['buy_price']) * sell_amount - active_trade['fee'] - float(sell_order['fee'])
+                    self.bot.profits[symbol] = self.bot.profits.get(symbol, 0) + profit
+                    self.bot.total_profit += profit
+                    self.bot.total_trades += 1
+                    self.bot.avg_profit_per_trade = self.bot.total_profit / self.bot.total_trades
+                    logger.info(f"Sold {symbol}: {sell_amount:.8f} at {current_price:.4f}, Profit: {profit:.4f} USDT")
+                    del self.bot.active_trades[active_trade['orderId']]
 
     @handle_trading_errors
     async def update_trading_status(self, current_prices: Dict[str, float]) -> None:
