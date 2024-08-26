@@ -4,7 +4,7 @@ import streamlit as st
 from typing import List, Tuple, Dict, Any
 from trading_bot import TradingBot
 import logging
-from config import load_config, fetch_real_time_prices, kucoin_client_manager
+from config import config_manager
 
 logger = logging.getLogger(__name__)
 
@@ -24,21 +24,20 @@ class TradingLoop:
         self.chosen_symbols = chosen_symbols
         self.profit_margin = profit_margin
         self.num_orders = num_orders
-        self.config = load_config()
 
     @handle_trading_errors
     def run(self, stop_event: threading.Event) -> None:
         while not stop_event.is_set():
             try:
                 self.trading_iteration()
-                time.sleep(self.config['bot_config']['update_interval'])
+                time.sleep(config_manager.config['bot_config']['update_interval'])
             except Exception as e:
                 logger.error(f"An error occurred in the trading loop: {str(e)}")
-                time.sleep(self.config['error_config']['retry_delay'])
+                time.sleep(config_manager.config['error_config']['retry_delay'])
 
     @handle_trading_errors
     def trading_iteration(self) -> None:
-        current_prices = fetch_real_time_prices(self.chosen_symbols)
+        current_prices = config_manager.fetch_real_time_prices(self.chosen_symbols)
         
         for symbol in self.chosen_symbols:
             self.process_symbol(symbol, current_prices[symbol])
@@ -118,11 +117,11 @@ def stop_trading_loop(stop_event: threading.Event, trading_thread: threading.Thr
         logger.info("Trading loop stopped successfully.")
 
 if __name__ == "__main__":
-    config = load_config()
-    bot = TradingBot.create(config['bot_config']['update_interval'])
-    chosen_symbols = config['default_trading_symbols']
-    profit_margin = config['default_profit_margin']
-    num_orders = config['default_num_orders']
+    bot = TradingBot(config_manager.config['bot_config']['update_interval'])
+    bot.initialize()
+    chosen_symbols = config_manager.config['default_trading_symbols']
+    profit_margin = config_manager.config['default_profit_margin']
+    num_orders = config_manager.config['default_num_orders']
     
     stop_event, trading_thread = initialize_trading_loop(bot, chosen_symbols, profit_margin, num_orders)
     
