@@ -57,9 +57,9 @@ class KucoinClientManager:
         return cls._instance
 
     async def initialize(self, api_key: str, api_secret: str, api_passphrase: str) -> None:
-        self.market_client = Market(key=api_key, secret=api_secret, passphrase=api_passphrase)
-        self.trade_client = Trade(key=api_key, secret=api_secret, passphrase=api_passphrase)
-        self.user_client = User(key=api_key, secret=api_secret, passphrase=api_passphrase)
+        self.market_client = Market(key=api_key, secret=api_secret, passphrase=api_passphrase, url="https://api.kucoin.com")
+        self.trade_client = Trade(key=api_key, secret=api_secret, passphrase=api_passphrase, url="https://api.kucoin.com")
+        self.user_client = User(key=api_key, secret=api_secret, passphrase=api_passphrase, url="https://api.kucoin.com")
 
     def get_client(self, client_type: type) -> Any:
         if client_type == Market:
@@ -89,7 +89,6 @@ async def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
         config = {}
 
     # Override with Streamlit secrets
-    config['api_url'] = st.secrets["api_credentials"]["api_url"]
     config['api_key'] = st.secrets["api_credentials"]["api_key"]
     config['api_secret'] = st.secrets["api_credentials"]["api_secret"]
     config['api_passphrase'] = st.secrets["api_credentials"]["api_passphrase"]
