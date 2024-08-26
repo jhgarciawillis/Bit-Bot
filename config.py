@@ -6,7 +6,6 @@ import streamlit as st
 import asyncio
 import random
 from kucoin.client import Market, Trade, User
-from kucoin.exceptions import KucoinAPIException
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -153,9 +152,6 @@ async def get_available_trading_symbols(config: Dict[str, Any]) -> List[str]:
         symbols = await asyncio.to_thread(market_client.get_symbol_list)
         available_symbols = [symbol['symbol'] for symbol in symbols if symbol['quoteCurrency'] == 'USDT']
         return available_symbols
-    except KucoinAPIException as e:
-        logger.error(f"Error fetching symbol list from KuCoin API: {e}")
-        return DEFAULT_TRADING_SYMBOLS
     except Exception as e:
         logger.error(f"Unexpected error fetching symbol list: {e}")
         return DEFAULT_TRADING_SYMBOLS
@@ -192,8 +188,6 @@ async def fetch_real_time_prices(symbols: List[str], is_simulation: bool = False
                 ticker = await asyncio.to_thread(market_client.get_ticker, symbol)
                 prices[symbol] = float(ticker['price'])
         logger.info(f"Fetched {'simulated' if is_simulation else 'real-time'} prices: {prices}")
-    except KucoinAPIException as e:
-        logger.error(f"KuCoin API error fetching {'simulated' if is_simulation else 'real-time'} prices: {e}")
     except Exception as e:
         logger.error(f"Unexpected error fetching {'simulated' if is_simulation else 'real-time'} prices: {e}")
     return prices
@@ -231,9 +225,6 @@ async def place_spot_order(symbol: str, side: str, price: float, size: float, is
             )
         logger.info(f"Placed {'simulated' if is_simulation else 'real'} {side} order for {symbol}: {order}")
         return order
-    except KucoinAPIException as e:
-        logger.error(f"KuCoin API error placing {'simulated' if is_simulation else 'real'} {side} order for {symbol}: {e}")
-        return {}
     except Exception as e:
         logger.error(f"Unexpected error placing {'simulated' if is_simulation else 'real'} {side} order for {symbol}: {e}")
         return {}
