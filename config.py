@@ -1,10 +1,7 @@
-import os
 import logging
 from typing import Dict, List, Any, Optional
-import yaml
 import streamlit as st
 import asyncio
-import random
 from kucoin.client import Market, Trade, User
 
 # Set up logging
@@ -73,55 +70,26 @@ class KucoinClientManager:
 
 kucoin_client_manager = KucoinClientManager()
 
-async def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
+async def load_config() -> Dict[str, Any]:
     """
-    Load configuration from a YAML file and environment variables asynchronously.
-    
-    :param config_file: Path to the YAML configuration file
-    :return: Dictionary containing the configuration
+    Load configuration from Streamlit secrets and default values.
     """
-    # Load configuration from YAML file
-    try:
-        with open(config_file, 'r') as file:
-            config = yaml.safe_load(file)
-    except FileNotFoundError:
-        logger.warning(f"Configuration file {config_file} not found. Using default configuration.")
-        config = {}
-
-    # Load configuration from environment variables
-    config['api_key'] = os.environ.get('API_KEY')
-    config['api_secret'] = os.environ.get('API_SECRET')
-    config['api_passphrase'] = os.environ.get('API_PASSPHRASE')
-    config['api_url'] = os.environ.get('API_URL')
-    config['live_trading_access_key'] = os.environ.get('LIVE_TRADING_ACCESS_KEY')
+    config = {
+        'api_key': st.secrets["api_credentials"]["api_key"],
+        'api_secret': st.secrets["api_credentials"]["api_secret"],
+        'api_passphrase': st.secrets["api_credentials"]["api_passphrase"],
+        'api_url': 'https://api.kucoin.com',  # You might want to add this to secrets if it can change
+        'live_trading_access_key': st.secrets["api_credentials"]["live_trading_access_key"],
+        'simulation_mode': SIMULATION_MODE,
+        'chart_config': CHART_CONFIG,
+        'bot_config': BOT_CONFIG,
+        'error_config': ERROR_CONFIG,
+        'default_usdt_liquid_percentage': DEFAULT_USDT_LIQUID_PERCENTAGE,
+        'default_profit_margin': DEFAULT_PROFIT_MARGIN,
+        'default_num_orders': DEFAULT_NUM_ORDERS,
+        'default_trading_symbols': DEFAULT_TRADING_SYMBOLS,
+    }
     
-    # Merge with default configurations
-    config['simulation_mode'] = {**SIMULATION_MODE, **config.get('simulation_mode', {})}
-    config['chart_config'] = {**CHART_CONFIG, **config.get('chart_config', {})}
-    config['bot_config'] = {**BOT_CONFIG, **config.get('bot_config', {})}
-    config['error_config'] = {**ERROR_CONFIG, **config.get('error_config', {})}
-    
-    # Ensure that the default_usdt_liquid_percentage is a valid value
-    config['default_usdt_liquid_percentage'] = config.get('default_usdt_liquid_percentage', DEFAULT_USDT_LIQUID_PERCENTAGE)
-    if config['default_usdt_liquid_percentage'] < 0 or config['default_usdt_liquid_percentage'] > 1:
-        logger.warning(f"Invalid value for default_usdt_liquid_percentage: {config['default_usdt_liquid_percentage']}")
-        config['default_usdt_liquid_percentage'] = DEFAULT_USDT_LIQUID_PERCENTAGE
-        logger.info(f"Using default value for default_usdt_liquid_percentage: {DEFAULT_USDT_LIQUID_PERCENTAGE}")
-
-    # Ensure that the default_profit_margin is a valid value
-    config['default_profit_margin'] = config.get('default_profit_margin', DEFAULT_PROFIT_MARGIN)
-    if config['default_profit_margin'] < 0 or config['default_profit_margin'] > 1:
-        logger.warning(f"Invalid value for default_profit_margin: {config['default_profit_margin']}")
-        config['default_profit_margin'] = DEFAULT_PROFIT_MARGIN
-        logger.info(f"Using default value for default_profit_margin: {DEFAULT_PROFIT_MARGIN}")
-
-    # Ensure that the default_num_orders is a valid value
-    config['default_num_orders'] = config.get('default_num_orders', DEFAULT_NUM_ORDERS)
-    if config['default_num_orders'] < 1 or config['default_num_orders'] > 10:
-        logger.warning(f"Invalid value for default_num_orders: {config['default_num_orders']}")
-        config['default_num_orders'] = DEFAULT_NUM_ORDERS
-        logger.info(f"Using default value for default_num_orders: {DEFAULT_NUM_ORDERS}")
-
     # Validate and update the default trading symbols
     config = await validate_default_trading_symbols(config)
 
@@ -163,33 +131,25 @@ def verify_live_trading_access(input_key: str) -> bool:
     :param input_key: The key input by the user
     :return: Boolean indicating whether the key is correct
     """
-    correct_key = os.environ.get('LIVE_TRADING_ACCESS_KEY')
+    correct_key = st.secrets["api_credentials"]["live_trading_access_key"]
     return input_key == correct_key
 
-async def fetch_real_time_prices(symbols: List[str], is_simulation: bool = False) -> Dict[str, float]:
+async def fetch_real_time_prices(symbols: List[str]) -> Dict[str, float]:
     """
-    Fetch real-time prices for the given symbols using KuCoin API or simulate prices.
+    Fetch real-time prices for the given symbols using KuCoin API.
     
     :param symbols: List of trading symbols
-    :param is_simulation: Boolean indicating whether to use simulated prices
     :return: Dictionary of symbol prices
     """
     prices = {}
     try:
-        if is_simulation:
-            for symbol in symbols:
-                # Simulate price movements
-                base_price = 100  # You can adjust this or use a different base for each symbol
-                price_change = random.uniform(-0.001, 0.001)  # -0.1% to 0.1% change
-                prices[symbol] = round(base_price * (1 + price_change), 2)
-        else:
-            market_client = kucoin_client_manager.get_client(Market)
-            for symbol in symbols:
-                ticker = await asyncio.to_thread(market_client.get_ticker, symbol)
-                prices[symbol] = float(ticker['price'])
-        logger.info(f"Fetched {'simulated' if is_simulation else 'real-time'} prices: {prices}")
+        market_client = kucoin_client_manager.get_client(Market)
+        for symbol in symbols:
+            ticker = await asyncio.to_thread(market_client.get_ticker, symbol)
+            prices[symbol] = float(ticker['price'])
+        logger.info(f"Fetched real-time prices: {prices}")
     except Exception as e:
-        logger.error(f"Unexpected error fetching {'simulated' if is_simulation else 'real-time'} prices: {e}")
+        logger.error(f"Unexpected error fetching real-time prices: {e}")
     return prices
 
 async def place_spot_order(symbol: str, side: str, price: float, size: float, is_simulation: bool = False) -> Dict[str, Any]:
@@ -223,10 +183,10 @@ async def place_spot_order(symbol: str, side: str, price: float, size: float, is
                 price=str(price),
                 size=str(size)
             )
-        logger.info(f"Placed {'simulated' if is_simulation else 'real'} {side} order for {symbol}: {order}")
+        logger.info(f"{'Simulated' if is_simulation else 'Placed'} {side} order for {symbol}: {order}")
         return order
     except Exception as e:
-        logger.error(f"Unexpected error placing {'simulated' if is_simulation else 'real'} {side} order for {symbol}: {e}")
+        logger.error(f"Unexpected error {'simulating' if is_simulation else 'placing'} {side} order for {symbol}: {e}")
         return {}
 
 async def initialize_kucoin_client(config: Dict[str, Any]) -> None:
@@ -244,7 +204,7 @@ if __name__ == "__main__":
         symbols = await get_available_trading_symbols(config)
         print("Available trading symbols:", symbols)
         
-        prices = await fetch_real_time_prices(config['default_trading_symbols'], is_simulation=False)
+        prices = await fetch_real_time_prices(config['default_trading_symbols'])
         print("Fetched real-time prices:", prices)
 
     asyncio.run(run_tests())
