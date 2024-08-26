@@ -5,6 +5,7 @@ from statistics import mean, stdev
 from typing import Dict, List, Optional, Tuple
 from wallet import create_wallet
 from config import load_config, fetch_real_time_prices, place_spot_order, kucoin_client_manager
+from kucoin.client import User
 import asyncio
 
 # Set up logging
