@@ -35,7 +35,7 @@ async def save_chart(fig, filename):
     logger.info(f"Chart saved as {filename}")
     st.success(f"Chart saved as {filename}")
 
-async def main():
+def main():
     logger.info("Starting main function...")
     st.set_page_config(layout="wide")
     st.title("Cryptocurrency Trading Bot")
@@ -44,11 +44,11 @@ async def main():
 
     try:
         logger.info("Loading configuration...")
-        config = await load_config()
+        config = load_config()
         logger.info("Initializing KuCoin client...")
-        await initialize_kucoin_client(config)
+        initialize_kucoin_client(config)
         logger.info("Initializing session state...")
-        await initialize_session_state()
+        initialize_session_state()
 
         if 'is_trading' not in st.session_state:
             st.session_state.is_trading = False
@@ -61,29 +61,30 @@ async def main():
 
         logger.info("Configuring sidebar...")
         sidebar_config = SidebarConfig(config)
-        is_simulation, simulated_usdt_balance = await sidebar_config.configure()
+        is_simulation, simulated_usdt_balance = sidebar_config.configure()
 
         if is_simulation is not None:
             logger.info(f"Simulation mode: {is_simulation}")
             if not is_simulation:
                 logger.info("Live trading mode, verifying access key...")
                 live_trading_verification = LiveTradingVerification(config)
-                if not await live_trading_verification.verify():
+                if not live_trading_verification.verify():
                     return
             
             logger.info("Initializing bot...")
-            bot = await initialize_bot(config, is_simulation, simulated_usdt_balance)
+            bot = st.session_state.bot = st.empty()
+            st.session_state.bot = asyncio.run(initialize_bot(config, is_simulation, simulated_usdt_balance))
 
             logger.info("Displaying wallet balance...")
-            wallet_balance = WalletBalance(bot)
-            await wallet_balance.display()
+            wallet_balance = WalletBalance(st.session_state.bot)
+            wallet_balance.display()
 
             logger.info("Displaying simulation indicator...")
             simulation_indicator = SimulationIndicator(is_simulation)
-            await simulation_indicator.display()
+            simulation_indicator.display()
 
             logger.info("Fetching available trading symbols...")
-            available_symbols = await get_available_trading_symbols(config)
+            available_symbols = get_available_trading_symbols(config)
             if not available_symbols:
                 logger.warning("No available trading symbols found. Please check your KuCoin API connection.")
                 st.warning("No available trading symbols found. Please check your KuCoin API connection.")
@@ -91,7 +92,7 @@ async def main():
             
             logger.info("Displaying symbol selector...")
             symbol_selector = SymbolSelector(available_symbols, config['default_trading_symbols'])
-            user_selected_symbols = await symbol_selector.display()
+            user_selected_symbols = symbol_selector.display()
 
             if not user_selected_symbols:
                 logger.warning("No symbols selected for trading.")
@@ -100,7 +101,7 @@ async def main():
 
             logger.info("Displaying trading parameters...")
             trading_params = TradingParameters(config)
-            usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade = await trading_params.display()
+            usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade = trading_params.display()
 
             logger.info("Informing users about total fees and suggested profit margin.")
             st.sidebar.info("Please note that the total fees for buying and selling are 0.2%. It is recommended to set a profit margin higher than 0.2% to cover the fees.")
@@ -113,10 +114,10 @@ async def main():
                 'num_orders_per_trade': num_orders_per_trade
             }
 
-            bot.usdt_liquid_percentage = usdt_liquid_percentage
+            st.session_state.bot.usdt_liquid_percentage = usdt_liquid_percentage
 
             logger.info("Getting user allocations...")
-            bot.symbol_allocations, tradable_usdt_amount = await bot.get_user_allocations(user_selected_symbols, await bot.wallet.get_total_balance_in_usdt())
+            st.session_state.bot.symbol_allocations, tradable_usdt_amount = asyncio.run(st.session_state.bot.get_user_allocations(user_selected_symbols, st.session_state.bot.wallet.get_total_balance_in_usdt()))
             if tradable_usdt_amount <= 0:
                 logger.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
                 st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
@@ -127,18 +128,18 @@ async def main():
 
             logger.info("Displaying trading controls...")
             trading_controls = TradingControls(config)
-            start_button, stop_button = await trading_controls.display()
+            start_button, stop_button = trading_controls.display()
 
             if start_button and not st.session_state.is_trading:
                 logger.info("Starting trading...")
                 st.session_state.is_trading = True
-                st.session_state.stop_event, st.session_state.trading_task = await initialize_trading_loop(
-                    bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade
-                )
+                st.session_state.stop_event, st.session_state.trading_task = asyncio.run(initialize_trading_loop(
+                    st.session_state.bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade
+                ))
 
             if st.session_state.is_trading:
                 logger.info("Trading is in progress, updating charts and status...")
-                chart_creator = ChartCreator(bot)
+                chart_creator = ChartCreator(st.session_state.bot)
                 chart_container = st.container()
                 chart_display = ChartDisplay(chart_container)
                 status_container = st.container()
@@ -149,31 +150,31 @@ async def main():
                     current_time = datetime.now()
                     if (current_time - last_update_time).total_seconds() >= 30:
                         logger.info("Updating charts and status...")
-                        charts = await chart_creator.create_charts_async()
-                        await chart_display.display(charts)
+                        charts = asyncio.run(chart_creator.create_charts_async())
+                        chart_display.display(charts)
 
                         logger.info("Fetching current prices and updating status table...")
-                        current_prices = await fetch_real_time_prices(user_selected_symbols, is_simulation)
-                        current_status = await bot.get_current_status(current_prices)
-                        status_table = StatusTable(status_container, bot, user_selected_symbols)
-                        await status_table.display(current_status)
+                        current_prices = fetch_real_time_prices(user_selected_symbols)
+                        current_status = asyncio.run(st.session_state.bot.get_current_status(current_prices))
+                        status_table = StatusTable(status_container, st.session_state.bot, user_selected_symbols)
+                        status_table.display(current_status)
 
                         logger.info("Displaying trade messages...")
                         trade_messages = TradeMessages(trade_messages_container)
-                        await trade_messages.display()
+                        trade_messages.display()
 
                         last_update_time = current_time
 
                 except Exception as e:
                     logger.error(f"An error occurred in the main loop: {e}")
                     error_message = ErrorMessage(error_container)
-                    await error_message.display()
+                    error_message.display()
 
             if stop_button or (not st.session_state.is_trading and st.session_state.stop_event):
                 logger.info("Stopping trading...")
                 st.session_state.is_trading = False
                 if st.session_state.stop_event and st.session_state.trading_task:
-                    await stop_trading_loop(st.session_state.stop_event, st.session_state.trading_task)
+                    asyncio.run(stop_trading_loop(st.session_state.stop_event, st.session_state.trading_task))
                     st.session_state.stop_event = None
                     st.session_state.trading_task = None
                 st.sidebar.success("Trading stopped.")
@@ -182,7 +183,7 @@ async def main():
     except Exception as e:
         logger.error(f"An error occurred in the main function: {e}")
         error_message = ErrorMessage(error_container)
-        await error_message.display()
+        error_message.display()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
