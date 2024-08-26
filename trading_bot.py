@@ -44,16 +44,15 @@ class TradingBot:
 
     @handle_trading_errors
     async def update_wallet_balances(self) -> None:
-        if not self.is_simulation:
-            try:
-                user_client = kucoin_client_manager.get_client(User)
-                accounts = await asyncio.to_thread(user_client.get_account_list)
-                for account in accounts:
-                    if account['type'] == 'trade':
-                        await self.wallet.update_account_balance("trading", account['currency'], float(account['available']))
-                logger.info(f"Updated wallet balances: {self.wallet.get_account_summary()}")
-            except Exception as e:
-                logger.error(f"Error updating wallet balances: {e}")
+        try:
+            user_client = kucoin_client_manager.get_client(User)
+            accounts = await asyncio.to_thread(user_client.get_account_list)
+            for account in accounts:
+                if account['type'] == 'trade':
+                    await self.wallet.update_account_balance("trading", account['currency'], float(account['available']))
+            logger.info(f"Updated wallet balances: {self.wallet.get_account_summary()}")
+        except Exception as e:
+            logger.error(f"Error updating wallet balances: {e}")
 
     def get_account_balance(self, currency: str = 'USDT') -> float:
         return self.wallet.get_currency_balance("trading", currency)
