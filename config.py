@@ -1,7 +1,6 @@
 import logging
 from typing import Dict, List, Any, Optional
 import streamlit as st
-import asyncio
 from kucoin.client import Market, Trade, User
 
 # Set up logging
@@ -53,7 +52,7 @@ class KucoinClientManager:
             cls._instance.user_client = None
         return cls._instance
 
-    async def initialize(self, api_key: str, api_secret: str, api_passphrase: str, api_url: str) -> None:
+    def initialize(self, api_key: str, api_secret: str, api_passphrase: str, api_url: str) -> None:
         self.market_client = Market(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
         self.trade_client = Trade(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
         self.user_client = User(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
@@ -70,7 +69,7 @@ class KucoinClientManager:
 
 kucoin_client_manager = KucoinClientManager()
 
-async def load_config() -> Dict[str, Any]:
+def load_config() -> Dict[str, Any]:
     """
     Load configuration from Streamlit secrets and default values.
     """
@@ -91,13 +90,13 @@ async def load_config() -> Dict[str, Any]:
     }
     
     # Validate and update the default trading symbols
-    config = await validate_default_trading_symbols(config)
+    config = validate_default_trading_symbols(config)
 
     return config
 
-async def validate_default_trading_symbols(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate and update the default trading symbols in the configuration asynchronously."""
-    available_symbols = await get_available_trading_symbols(config)
+def validate_default_trading_symbols(config: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate and update the default trading symbols in the configuration."""
+    available_symbols = get_available_trading_symbols(config)
     default_trading_symbols = config.get('default_trading_symbols', DEFAULT_TRADING_SYMBOLS)
 
     # Check if the default trading symbols are available
@@ -113,11 +112,11 @@ async def validate_default_trading_symbols(config: Dict[str, Any]) -> Dict[str, 
 
     return config
 
-async def get_available_trading_symbols(config: Dict[str, Any]) -> List[str]:
-    """Fetch available trading symbols from KuCoin API asynchronously."""
+def get_available_trading_symbols(config: Dict[str, Any]) -> List[str]:
+    """Fetch available trading symbols from KuCoin API."""
     try:
         market_client = kucoin_client_manager.get_client(Market)
-        symbols = await asyncio.to_thread(market_client.get_symbol_list)
+        symbols = market_client.get_symbol_list()
         available_symbols = [symbol['symbol'] for symbol in symbols if symbol['quoteCurrency'] == 'USDT']
         return available_symbols
     except Exception as e:
@@ -134,7 +133,7 @@ def verify_live_trading_access(input_key: str) -> bool:
     correct_key = st.secrets["api_credentials"]["live_trading_access_key"]
     return input_key == correct_key
 
-async def fetch_real_time_prices(symbols: List[str]) -> Dict[str, float]:
+def fetch_real_time_prices(symbols: List[str]) -> Dict[str, float]:
     """
     Fetch real-time prices for the given symbols using KuCoin API.
     
@@ -145,14 +144,14 @@ async def fetch_real_time_prices(symbols: List[str]) -> Dict[str, float]:
     try:
         market_client = kucoin_client_manager.get_client(Market)
         for symbol in symbols:
-            ticker = await asyncio.to_thread(market_client.get_ticker, symbol)
+            ticker = market_client.get_ticker(symbol)
             prices[symbol] = float(ticker['price'])
         logger.info(f"Fetched real-time prices: {prices}")
     except Exception as e:
         logger.error(f"Unexpected error fetching real-time prices: {e}")
     return prices
 
-async def place_spot_order(symbol: str, side: str, price: float, size: float, is_simulation: bool = False) -> Dict[str, Any]:
+def place_spot_order(symbol: str, side: str, price: float, size: float, is_simulation: bool = False) -> Dict[str, Any]:
     """
     Place a spot order on KuCoin or simulate order placement.
     
@@ -166,8 +165,9 @@ async def place_spot_order(symbol: str, side: str, price: float, size: float, is
     try:
         if is_simulation:
             # Simulate order placement
+            import time
             order = {
-                'orderId': f'sim_{side}_{symbol}_{asyncio.get_event_loop().time()}',
+                'orderId': f'sim_{side}_{symbol}_{time.time()}',
                 'symbol': symbol,
                 'side': side,
                 'price': price,
@@ -176,8 +176,7 @@ async def place_spot_order(symbol: str, side: str, price: float, size: float, is
             }
         else:
             trade_client = kucoin_client_manager.get_client(Trade)
-            order = await asyncio.to_thread(
-                trade_client.create_limit_order,
+            order = trade_client.create_limit_order(
                 symbol=symbol,
                 side=side,
                 price=str(price),
@@ -189,22 +188,19 @@ async def place_spot_order(symbol: str, side: str, price: float, size: float, is
         logger.error(f"Unexpected error {'simulating' if is_simulation else 'placing'} {side} order for {symbol}: {e}")
         return {}
 
-async def initialize_kucoin_client(config: Dict[str, Any]) -> None:
+def initialize_kucoin_client(config: Dict[str, Any]) -> None:
     """Initialize the KuCoin client with the provided credentials."""
-    await kucoin_client_manager.initialize(config['api_key'], config['api_secret'], config['api_passphrase'], config['api_url'])
+    kucoin_client_manager.initialize(config['api_key'], config['api_secret'], config['api_passphrase'], config['api_url'])
 
 if __name__ == "__main__":
     # This block allows running config-related functions independently for testing
-    async def run_tests():
-        config = await load_config()
-        print("Loaded configuration:", config)
-        
-        await initialize_kucoin_client(config)
-        
-        symbols = await get_available_trading_symbols(config)
-        print("Available trading symbols:", symbols)
-        
-        prices = await fetch_real_time_prices(config['default_trading_symbols'])
-        print("Fetched real-time prices:", prices)
-
-    asyncio.run(run_tests())
+    config = load_config()
+    print("Loaded configuration:", config)
+    
+    initialize_kucoin_client(config)
+    
+    symbols = get_available_trading_symbols(config)
+    print("Available trading symbols:", symbols)
+    
+    prices = fetch_real_time_prices(config['default_trading_symbols'])
+    print("Fetched real-time prices:", prices)
