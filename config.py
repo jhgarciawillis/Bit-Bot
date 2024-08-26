@@ -2,43 +2,36 @@ import logging
 from typing import Dict, List, Any, Optional
 import streamlit as st
 from kucoin.client import Market, Trade, User
+import time
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# Default trading symbols
-DEFAULT_TRADING_SYMBOLS: List[str] = ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT']
-
-# Trading parameters
-DEFAULT_PROFIT_MARGIN: float = 0.01  # 1%
-DEFAULT_NUM_ORDERS: int = 1
-DEFAULT_USDT_LIQUID_PERCENTAGE: float = 0.5  # 50%
-
-# Configuration for simulation mode
-SIMULATION_MODE: Dict[str, Any] = {
-    'enabled': True,
-    'initial_balance': 1000.0,
-}
-
-# Chart configuration
-CHART_CONFIG: Dict[str, Any] = {
-    'update_interval': 1,  # in seconds
-    'history_length': 120,  # in minutes
-    'height': 600,
-    'width': 800,
-}
-
-# Trading bot configuration
-BOT_CONFIG: Dict[str, Any] = {
-    'update_interval': 1,  # in seconds
-    'price_check_interval': 5,  # in seconds
-}
-
-# Error handling configuration
-ERROR_CONFIG: Dict[str, Any] = {
-    'max_retries': 3,
-    'retry_delay': 5,  # in seconds
+# Default configurations
+DEFAULT_CONFIG = {
+    'trading_symbols': ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT'],
+    'profit_margin': 0.01,  # 1%
+    'num_orders': 1,
+    'usdt_liquid_percentage': 0.5,  # 50%
+    'simulation_mode': {
+        'enabled': True,
+        'initial_balance': 1000.0,
+    },
+    'chart_config': {
+        'update_interval': 1,  # in seconds
+        'history_length': 120,  # in minutes
+        'height': 600,
+        'width': 800,
+    },
+    'bot_config': {
+        'update_interval': 1,  # in seconds
+        'price_check_interval': 5,  # in seconds
+    },
+    'error_config': {
+        'max_retries': 3,
+        'retry_delay': 5,  # in seconds
+    }
 }
 
 class KucoinClientManager:
@@ -69,138 +62,93 @@ class KucoinClientManager:
 
 kucoin_client_manager = KucoinClientManager()
 
-def load_config() -> Dict[str, Any]:
-    """
-    Load configuration from Streamlit secrets and default values.
-    """
-    config = {
-        'api_key': st.secrets["api_credentials"]["api_key"],
-        'api_secret': st.secrets["api_credentials"]["api_secret"],
-        'api_passphrase': st.secrets["api_credentials"]["api_passphrase"],
-        'api_url': 'https://api.kucoin.com',  # You might want to add this to secrets if it can change
-        'live_trading_access_key': st.secrets["api_credentials"]["live_trading_access_key"],
-        'simulation_mode': SIMULATION_MODE,
-        'chart_config': CHART_CONFIG,
-        'bot_config': BOT_CONFIG,
-        'error_config': ERROR_CONFIG,
-        'default_usdt_liquid_percentage': DEFAULT_USDT_LIQUID_PERCENTAGE,
-        'default_profit_margin': DEFAULT_PROFIT_MARGIN,
-        'default_num_orders': DEFAULT_NUM_ORDERS,
-        'default_trading_symbols': DEFAULT_TRADING_SYMBOLS,
-    }
-    
-    # Validate and update the default trading symbols
-    config = validate_default_trading_symbols(config)
+class ConfigManager:
+    def __init__(self):
+        self.config = self.load_config()
 
-    return config
+    def load_config(self) -> Dict[str, Any]:
+        config = DEFAULT_CONFIG.copy()
+        config.update({
+            'api_key': st.secrets["api_credentials"]["api_key"],
+            'api_secret': st.secrets["api_credentials"]["api_secret"],
+            'api_passphrase': st.secrets["api_credentials"]["api_passphrase"],
+            'api_url': 'https://api.kucoin.com',
+            'live_trading_access_key': st.secrets["api_credentials"]["live_trading_access_key"],
+        })
+        config['trading_symbols'] = self.validate_trading_symbols(config['trading_symbols'])
+        return config
 
-def validate_default_trading_symbols(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Validate and update the default trading symbols in the configuration."""
-    available_symbols = get_available_trading_symbols(config)
-    default_trading_symbols = config.get('default_trading_symbols', DEFAULT_TRADING_SYMBOLS)
+    def validate_trading_symbols(self, symbols: List[str]) -> List[str]:
+        available_symbols = self.get_available_trading_symbols()
+        valid_symbols = [symbol for symbol in symbols if symbol in available_symbols]
+        if len(valid_symbols) != len(symbols):
+            logger.warning(f"Some trading symbols are not available: {set(symbols) - set(valid_symbols)}")
+            logger.info(f"Using available trading symbols: {valid_symbols}")
+        return valid_symbols
 
-    # Check if the default trading symbols are available
-    valid_default_symbols = [symbol for symbol in default_trading_symbols if symbol in available_symbols]
+    def get_available_trading_symbols(self) -> List[str]:
+        try:
+            market_client = kucoin_client_manager.get_client(Market)
+            symbols = market_client.get_symbol_list()
+            return [symbol['symbol'] for symbol in symbols if symbol['quoteCurrency'] == 'USDT']
+        except Exception as e:
+            logger.error(f"Unexpected error fetching symbol list: {e}")
+            return self.config['trading_symbols']
 
-    # If any default symbols are not available, use the available symbols instead
-    if len(valid_default_symbols) != len(default_trading_symbols):
-        logger.warning(f"Some default trading symbols are not available: {set(default_trading_symbols) - set(available_symbols)}")
-        logger.info(f"Using available trading symbols: {valid_default_symbols}")
-        config['default_trading_symbols'] = valid_default_symbols
-    else:
-        config['default_trading_symbols'] = default_trading_symbols
+    def verify_live_trading_access(self, input_key: str) -> bool:
+        return input_key == self.config['live_trading_access_key']
 
-    return config
+    def fetch_real_time_prices(self, symbols: List[str]) -> Dict[str, float]:
+        prices = {}
+        try:
+            market_client = kucoin_client_manager.get_client(Market)
+            for symbol in symbols:
+                ticker = market_client.get_ticker(symbol)
+                prices[symbol] = float(ticker['price'])
+            logger.info(f"Fetched real-time prices: {prices}")
+        except Exception as e:
+            logger.error(f"Unexpected error fetching real-time prices: {e}")
+        return prices
 
-def get_available_trading_symbols(config: Dict[str, Any]) -> List[str]:
-    """Fetch available trading symbols from KuCoin API."""
-    try:
-        market_client = kucoin_client_manager.get_client(Market)
-        symbols = market_client.get_symbol_list()
-        available_symbols = [symbol['symbol'] for symbol in symbols if symbol['quoteCurrency'] == 'USDT']
-        return available_symbols
-    except Exception as e:
-        logger.error(f"Unexpected error fetching symbol list: {e}")
-        return DEFAULT_TRADING_SYMBOLS
+    def place_spot_order(self, symbol: str, side: str, price: float, size: float, is_simulation: bool = False) -> Dict[str, Any]:
+        try:
+            if is_simulation:
+                order = {
+                    'orderId': f'sim_{side}_{symbol}_{time.time()}',
+                    'symbol': symbol,
+                    'side': side,
+                    'price': price,
+                    'size': size,
+                    'fee': size * price * 0.001  # Simulated 0.1% fee
+                }
+            else:
+                trade_client = kucoin_client_manager.get_client(Trade)
+                order = trade_client.create_limit_order(
+                    symbol=symbol,
+                    side=side,
+                    price=str(price),
+                    size=str(size)
+                )
+            logger.info(f"{'Simulated' if is_simulation else 'Placed'} {side} order for {symbol}: {order}")
+            return order
+        except Exception as e:
+            logger.error(f"Unexpected error {'simulating' if is_simulation else 'placing'} {side} order for {symbol}: {e}")
+            return {}
 
-def verify_live_trading_access(input_key: str) -> bool:
-    """
-    Verify the live trading access key.
-    
-    :param input_key: The key input by the user
-    :return: Boolean indicating whether the key is correct
-    """
-    correct_key = st.secrets["api_credentials"]["live_trading_access_key"]
-    return input_key == correct_key
+    def initialize_kucoin_client(self) -> None:
+        kucoin_client_manager.initialize(
+            self.config['api_key'],
+            self.config['api_secret'],
+            self.config['api_passphrase'],
+            self.config['api_url']
+        )
 
-def fetch_real_time_prices(symbols: List[str]) -> Dict[str, float]:
-    """
-    Fetch real-time prices for the given symbols using KuCoin API.
-    
-    :param symbols: List of trading symbols
-    :return: Dictionary of symbol prices
-    """
-    prices = {}
-    try:
-        market_client = kucoin_client_manager.get_client(Market)
-        for symbol in symbols:
-            ticker = market_client.get_ticker(symbol)
-            prices[symbol] = float(ticker['price'])
-        logger.info(f"Fetched real-time prices: {prices}")
-    except Exception as e:
-        logger.error(f"Unexpected error fetching real-time prices: {e}")
-    return prices
-
-def place_spot_order(symbol: str, side: str, price: float, size: float, is_simulation: bool = False) -> Dict[str, Any]:
-    """
-    Place a spot order on KuCoin or simulate order placement.
-    
-    :param symbol: Trading symbol
-    :param side: 'buy' or 'sell'
-    :param price: Order price
-    :param size: Order size
-    :param is_simulation: Boolean indicating whether to simulate order placement
-    :return: Order details
-    """
-    try:
-        if is_simulation:
-            # Simulate order placement
-            import time
-            order = {
-                'orderId': f'sim_{side}_{symbol}_{time.time()}',
-                'symbol': symbol,
-                'side': side,
-                'price': price,
-                'size': size,
-                'fee': size * price * 0.001  # Simulated 0.1% fee
-            }
-        else:
-            trade_client = kucoin_client_manager.get_client(Trade)
-            order = trade_client.create_limit_order(
-                symbol=symbol,
-                side=side,
-                price=str(price),
-                size=str(size)
-            )
-        logger.info(f"{'Simulated' if is_simulation else 'Placed'} {side} order for {symbol}: {order}")
-        return order
-    except Exception as e:
-        logger.error(f"Unexpected error {'simulating' if is_simulation else 'placing'} {side} order for {symbol}: {e}")
-        return {}
-
-def initialize_kucoin_client(config: Dict[str, Any]) -> None:
-    """Initialize the KuCoin client with the provided credentials."""
-    kucoin_client_manager.initialize(config['api_key'], config['api_secret'], config['api_passphrase'], config['api_url'])
+config_manager = ConfigManager()
 
 if __name__ == "__main__":
-    # This block allows running config-related functions independently for testing
-    config = load_config()
-    print("Loaded configuration:", config)
-    
-    initialize_kucoin_client(config)
-    
-    symbols = get_available_trading_symbols(config)
+    print("Loaded configuration:", config_manager.config)
+    config_manager.initialize_kucoin_client()
+    symbols = config_manager.get_available_trading_symbols()
     print("Available trading symbols:", symbols)
-    
-    prices = fetch_real_time_prices(config['default_trading_symbols'])
+    prices = config_manager.fetch_real_time_prices(config_manager.config['trading_symbols'])
     print("Fetched real-time prices:", prices)
