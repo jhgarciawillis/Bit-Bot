@@ -14,24 +14,28 @@ from wallet import create_wallet
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-async def initialize_bot(config: Dict[str, Any], is_simulation: bool, simulated_usdt_balance: float = 0) -> TradingBot:
+def initialize_bot(config: Dict[str, Any], is_simulation: bool, simulated_usdt_balance: float = 0) -> TradingBot:
     logger.info("Initializing bot...")
-    bot = await create_trading_bot(config['bot_config']['update_interval'])
+    bot = st.session_state.get('bot')
+    if bot is None:
+        bot = TradingBot(config['bot_config']['update_interval'])
+        st.session_state['bot'] = bot
+    
     bot.is_simulation = is_simulation
     
     if is_simulation:
         logger.info("Simulation mode enabled, updating USDT balance.")
-        await bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
+        bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
     else:
         logger.info("Live trading mode, initializing bot.")
-        await bot.initialize()
+        bot.initialize()
     
     logger.info("Bot initialized successfully.")
     return bot
 
-async def save_chart(fig, filename):
+def save_chart(fig, filename):
     logger.info(f"Saving chart as {filename}...")
-    await fig.write_image(filename)
+    fig.write_image(filename)
     logger.info(f"Chart saved as {filename}")
     st.success(f"Chart saved as {filename}")
 
@@ -72,11 +76,10 @@ def main():
                     return
             
             logger.info("Initializing bot...")
-            bot = st.session_state.bot = st.empty()
-            st.session_state.bot = asyncio.run(initialize_bot(config, is_simulation, simulated_usdt_balance))
+            bot = initialize_bot(config, is_simulation, simulated_usdt_balance)
 
             logger.info("Displaying wallet balance...")
-            wallet_balance = WalletBalance(st.session_state.bot)
+            wallet_balance = WalletBalance(bot)
             wallet_balance.display()
 
             logger.info("Displaying simulation indicator...")
@@ -114,10 +117,10 @@ def main():
                 'num_orders_per_trade': num_orders_per_trade
             }
 
-            st.session_state.bot.usdt_liquid_percentage = usdt_liquid_percentage
+            bot.usdt_liquid_percentage = usdt_liquid_percentage
 
             logger.info("Getting user allocations...")
-            st.session_state.bot.symbol_allocations, tradable_usdt_amount = asyncio.run(st.session_state.bot.get_user_allocations(user_selected_symbols, st.session_state.bot.wallet.get_total_balance_in_usdt()))
+            bot.symbol_allocations, tradable_usdt_amount = bot.get_user_allocations(user_selected_symbols, bot.wallet.get_total_balance_in_usdt())
             if tradable_usdt_amount <= 0:
                 logger.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
                 st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
@@ -133,13 +136,13 @@ def main():
             if start_button and not st.session_state.is_trading:
                 logger.info("Starting trading...")
                 st.session_state.is_trading = True
-                st.session_state.stop_event, st.session_state.trading_task = asyncio.run(initialize_trading_loop(
-                    st.session_state.bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade
-                ))
+                st.session_state.stop_event, st.session_state.trading_task = initialize_trading_loop(
+                    bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade
+                )
 
             if st.session_state.is_trading:
                 logger.info("Trading is in progress, updating charts and status...")
-                chart_creator = ChartCreator(st.session_state.bot)
+                chart_creator = ChartCreator(bot)
                 chart_container = st.container()
                 chart_display = ChartDisplay(chart_container)
                 status_container = st.container()
@@ -150,13 +153,13 @@ def main():
                     current_time = datetime.now()
                     if (current_time - last_update_time).total_seconds() >= 30:
                         logger.info("Updating charts and status...")
-                        charts = asyncio.run(chart_creator.create_charts_async())
+                        charts = chart_creator.create_charts()
                         chart_display.display(charts)
 
                         logger.info("Fetching current prices and updating status table...")
                         current_prices = fetch_real_time_prices(user_selected_symbols)
-                        current_status = asyncio.run(st.session_state.bot.get_current_status(current_prices))
-                        status_table = StatusTable(status_container, st.session_state.bot, user_selected_symbols)
+                        current_status = bot.get_current_status(current_prices)
+                        status_table = StatusTable(status_container, bot, user_selected_symbols)
                         status_table.display(current_status)
 
                         logger.info("Displaying trade messages...")
@@ -174,7 +177,7 @@ def main():
                 logger.info("Stopping trading...")
                 st.session_state.is_trading = False
                 if st.session_state.stop_event and st.session_state.trading_task:
-                    asyncio.run(stop_trading_loop(st.session_state.stop_event, st.session_state.trading_task))
+                    stop_trading_loop(st.session_state.stop_event, st.session_state.trading_task)
                     st.session_state.stop_event = None
                     st.session_state.trading_task = None
                 st.sidebar.success("Trading stopped.")
