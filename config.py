@@ -143,6 +143,20 @@ class ConfigManager:
             self.config['api_url']
         )
 
+    def get_account_list(self) -> List[Dict[str, Any]]:
+        try:
+            user_client = kucoin_client_manager.get_client(User)
+            return user_client.get_account_list()
+        except Exception as e:
+            logger.error(f"Unexpected error fetching account list: {e}")
+            return []
+
+    def update_config(self, key: str, value: Any) -> None:
+        self.config[key] = value
+
+    def get_config(self, key: str, default: Any = None) -> Any:
+        return self.config.get(key, default)
+
 config_manager = ConfigManager()
 
 if __name__ == "__main__":
