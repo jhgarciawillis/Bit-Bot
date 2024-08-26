@@ -4,8 +4,7 @@ from collections import deque
 from statistics import mean, stdev
 from typing import Dict, List, Optional, Tuple
 from wallet import create_wallet
-from config import load_config, fetch_real_time_prices, place_spot_order, kucoin_client_manager
-from kucoin.client import User
+from config import config_manager
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -33,10 +32,9 @@ class TradingBot:
         self.status_history: List[Dict] = []
 
     def initialize(self) -> None:
-        self.config = load_config()
-        self.is_simulation = self.config['simulation_mode']['enabled']
-        self.usdt_liquid_percentage = self.config['default_usdt_liquid_percentage']
-        self.PRICE_HISTORY_LENGTH = self.config['chart_config']['history_length']
+        self.is_simulation = config_manager.config['simulation_mode']['enabled']
+        self.usdt_liquid_percentage = config_manager.config['default_usdt_liquid_percentage']
+        self.PRICE_HISTORY_LENGTH = config_manager.config['chart_config']['history_length']
         self.wallet = create_wallet()
         if not self.is_simulation:
             self.update_wallet_balances()
@@ -44,8 +42,7 @@ class TradingBot:
     @handle_trading_errors
     def update_wallet_balances(self) -> None:
         try:
-            user_client = kucoin_client_manager.get_client(User)
-            accounts = user_client.get_account_list()
+            accounts = config_manager.get_account_list()
             for account in accounts:
                 if account['type'] == 'trade':
                     self.wallet.update_account_balance("trading", account['currency'], float(account['available']))
@@ -99,7 +96,7 @@ class TradingBot:
     @handle_trading_errors
     def place_buy_order(self, symbol: str, amount_usdt: float, limit_price: float) -> Optional[Dict]:
         amount_crypto = amount_usdt / limit_price
-        order = place_spot_order(symbol, 'buy', limit_price, amount_crypto, self.is_simulation)
+        order = config_manager.place_spot_order(symbol, 'buy', limit_price, amount_crypto, self.is_simulation)
         
         if order:
             self.active_trades[order['orderId']] = {
@@ -115,7 +112,7 @@ class TradingBot:
 
     @handle_trading_errors
     def place_sell_order(self, symbol: str, amount_crypto: float, target_sell_price: float) -> Optional[Dict]:
-        order = place_spot_order(symbol, 'sell', target_sell_price, amount_crypto, self.is_simulation)
+        order = config_manager.place_spot_order(symbol, 'sell', target_sell_price, amount_crypto, self.is_simulation)
         
         if order:
             self.wallet.update_wallet_state("trading", symbol, float(order['amount']), float(order['price']), 'sell')
