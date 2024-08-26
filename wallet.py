@@ -1,43 +1,47 @@
 from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 import logging
-from kucoin.client import Market, Trade, User
-from config import kucoin_client_manager
+from config import config_manager
 
 logger = logging.getLogger(__name__)
+
+class Trade:
+    def __init__(self, timestamp: datetime, amount: float, price: float):
+        self.timestamp = timestamp
+        self.amount = amount
+        self.price = price
 
 class Currency:
     def __init__(self, symbol: str, balance: float = 0):
         self.symbol: str = symbol
         self.balance: float = balance
         self.price_history: List[Tuple[datetime, float]] = []
-        self.buy_history: List[Tuple[datetime, float, float]] = []
-        self.sell_history: List[Tuple[datetime, float, float]] = []
+        self.buy_history: List[Trade] = []
+        self.sell_history: List[Trade] = []
         self.current_price: Optional[float] = None
 
     def update_price(self, price: float, timestamp: Optional[datetime] = None) -> None:
-        if timestamp is None:
-            timestamp = datetime.now()
+        timestamp = timestamp or datetime.now()
         self.price_history.append((timestamp, price))
         self.current_price = price
 
     def record_trade(self, amount: float, price: float, trade_type: str, timestamp: Optional[datetime] = None) -> None:
-        if timestamp is None:
-            timestamp = datetime.now()
+        timestamp = timestamp or datetime.now()
+        trade = Trade(timestamp, amount, price)
         
         if trade_type == 'buy':
-            self.buy_history.append((timestamp, amount, price))
+            self.buy_history.append(trade)
             self.balance += amount
         elif trade_type == 'sell':
-            self.sell_history.append((timestamp, amount, price))
+            self.sell_history.append(trade)
             self.balance -= amount
         
         logger.info(f"Recorded {trade_type}: {self.symbol} - Amount: {amount}, Price: {price}")
 
 class Account:
-    def __init__(self, account_type: str, currencies: Optional[Dict[str, Currency]] = None):
+    def __init__(self, account_type: str):
         self.account_type: str = account_type
-        self.currencies: Dict[str, Currency] = currencies or {}
+        self.currencies: Dict[str, Currency] = {}
 
     def add_currency(self, symbol: str, balance: float = 0) -> None:
         if symbol not in self.currencies:
@@ -74,17 +78,14 @@ class Wallet:
     def get_total_balance_in_usdt(self) -> float:
         total_usdt = 0
         try:
-            market_client = kucoin_client_manager.get_client(Market)
             for account in self.accounts.values():
                 for currency in account.currencies.values():
                     if currency.symbol == 'USDT':
                         total_usdt += currency.balance
-                    else:
-                        ticker = market_client.get_ticker(f"{currency.symbol}-USDT")
-                        price = float(ticker['price'])
-                        total_usdt += currency.balance * price
+                    elif currency.current_price is not None:
+                        total_usdt += currency.balance * currency.current_price
         except Exception as e:
-            logger.error(f"Unexpected error fetching total balance: {e}")
+            logger.error(f"Unexpected error calculating total balance: {e}")
         return total_usdt
 
     def update_account_balance(self, account_type: str, symbol: str, new_balance: float) -> None:
@@ -97,15 +98,14 @@ class Wallet:
             self.accounts[account_type].update_currency_price(symbol, price)
 
     def get_account_summary(self) -> Dict[str, Dict[str, Dict[str, float]]]:
-        summary = {}
-        for account_type, account in self.accounts.items():
-            summary[account_type] = {
+        return {
+            account_type: {
                 symbol: {
                     'balance': currency.balance,
                     'current_price': currency.current_price
                 } for symbol, currency in account.currencies.items()
-            }
-        return summary
+            } for account_type, account in self.accounts.items()
+        }
 
     def record_trade(self, account_type: str, symbol: str, amount: float, price: float, trade_type: str) -> None:
         account = self.get_account(account_type)
@@ -115,23 +115,21 @@ class Wallet:
             
             # Update USDT balance
             usdt_amount = amount * price
+            usdt_balance = self.get_currency_balance(account_type, 'USDT')
             if trade_type == 'buy':
-                self.update_account_balance(account_type, 'USDT', self.get_currency_balance(account_type, 'USDT') - usdt_amount)
+                self.update_account_balance(account_type, 'USDT', usdt_balance - usdt_amount)
             elif trade_type == 'sell':
-                self.update_account_balance(account_type, 'USDT', self.get_currency_balance(account_type, 'USDT') + usdt_amount)
+                self.update_account_balance(account_type, 'USDT', usdt_balance + usdt_amount)
         else:
             logger.warning(f"Failed to record trade: Account {account_type} or currency {symbol} not found")
 
     def get_currency_balance(self, account_type: str, symbol: str) -> float:
         account = self.get_account(account_type)
-        if account:
-            return account.get_currency_balance(symbol)
-        return 0
+        return account.get_currency_balance(symbol) if account else 0
 
     def sync_with_exchange(self, account_type: str) -> None:
         try:
-            user_client = kucoin_client_manager.get_client(User)
-            accounts = user_client.get_account_list()
+            accounts = config_manager.get_account_list()
             for account in accounts:
                 if account['type'] == account_type:
                     symbol = account['currency']
