@@ -1,107 +1,137 @@
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Tuple
 import logging
-from config import load_config
-from trading_loop import handle_errors
+from config import config_manager
 
 logger = logging.getLogger(__name__)
+
+def handle_errors(func):
+    def wrapper(*args, **kwargs):
+        try:
+            return func(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"An error occurred in {func.__name__}: {str(e)}")
+            raise
+    return wrapper
+
+class Chart:
+    def __init__(self, title: str, x_title: str, y_title: str):
+        self.fig = go.Figure()
+        self.update_layout(title, x_title, y_title)
+
+    def update_layout(self, title: str, x_title: str, y_title: str):
+        self.fig.update_layout(
+            title=title,
+            xaxis_title=x_title,
+            yaxis_title=y_title,
+            height=config_manager.config['chart_config']['height'],
+            width=config_manager.config['chart_config']['width'],
+            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+        )
+
+    def add_line_trace(self, x: List[Any], y: List[Any], name: str):
+        self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=name))
+
+    def add_marker_trace(self, x: List[Any], y: List[Any], name: str, marker_symbol: str, marker_size: int, marker_color: str):
+        self.fig.add_trace(go.Scatter(
+            x=x, y=y, mode='markers', name=name,
+            marker=dict(symbol=marker_symbol, size=marker_size, color=marker_color)
+        ))
+
+    def add_horizontal_line(self, y: float, line_dash: str, annotation_text: str, line_color: str):
+        self.fig.add_hline(y=y, line_dash=line_dash, annotation_text=annotation_text, line_color=line_color)
+
+    @handle_errors
+    def save(self, filename: str):
+        self.fig.write_image(filename)
+        logger.info(f"Chart saved as {filename}")
+
+class PriceChart(Chart):
+    def __init__(self, symbol: str):
+        super().__init__(f'{symbol} Price Chart', 'Timestamp', 'Price (USDT)')
+        self.symbol = symbol
+
+    def add_price_data(self, timestamps: List[datetime], prices: List[float]):
+        self.add_line_trace(timestamps, prices, f'{self.symbol} Price')
+
+    def add_buy_signals(self, buy_timestamps: List[datetime], buy_signals: List[float]):
+        self.add_marker_trace(buy_timestamps, buy_signals, f'{self.symbol} Buy Signal', 'triangle-up', 10, 'green')
+
+    def add_trade_lines(self, buy_price: float, target_sell_price: float):
+        self.add_horizontal_line(buy_price, "dash", "Buy Price", "blue")
+        self.add_horizontal_line(target_sell_price, "dot", "Target Sell Price", "red")
+
+class ProfitChart(Chart):
+    def __init__(self):
+        super().__init__('Total Profit Over Time', 'Timestamp', 'Total Profit (USDT)')
+
+    def add_profit_data(self, timestamps: List[datetime], total_profits: List[float]):
+        self.add_line_trace(timestamps, total_profits, 'Total Profit')
 
 class ChartCreator:
     def __init__(self, bot):
         self.bot = bot
-        self.config = load_config()
 
     @handle_errors
     def create_charts(self) -> Dict[str, Any]:
-        individual_price_charts = self.create_individual_price_charts()
-        total_profit_fig = self.create_total_profit_chart()
-        
         return {
-            'individual_price_charts': individual_price_charts,
-            'total_profit': total_profit_fig
+            'individual_price_charts': self.create_individual_price_charts(),
+            'total_profit': self.create_total_profit_chart()
         }
 
-    @handle_errors
     def create_individual_price_charts(self) -> Dict[str, go.Figure]:
-        charts = {}
-        for symbol in self.bot.symbol_allocations:
-            charts[symbol] = self.create_single_price_chart(symbol)
-        return charts
+        return {symbol: self.create_single_price_chart(symbol) for symbol in self.bot.symbol_allocations}
 
     def create_single_price_chart(self, symbol: str) -> go.Figure:
-        fig = go.Figure()
-
         price_data = self.bot.price_history.get(symbol, [])
-        timestamps = [entry['timestamp'] for entry in price_data]
-        prices = [entry['price'] for entry in price_data]
-
-        fig.add_trace(go.Scatter(x=timestamps, y=prices, mode='lines', name=f'{symbol} Price'))
-
-        buy_signals = []
-        buy_timestamps = []
-        for entry in price_data:
-            should_buy = self.bot.should_buy(symbol, entry['price'])
-            if should_buy is not None:
-                buy_signals.append(entry['price'])
-                buy_timestamps.append(entry['timestamp'])
-
-        fig.add_trace(go.Scatter(
-            x=buy_timestamps,
-            y=buy_signals,
-            mode='markers',
-            marker=dict(symbol='triangle-up', size=10, color='green'),
-            name=f'{symbol} Buy Signal'
-        ))
-
-        active_trade = next((trade for trade in self.bot.active_trades.values() if trade['symbol'] == symbol), None)
+        timestamps, prices = self.extract_price_data(price_data)
+        
+        chart = PriceChart(symbol)
+        chart.add_price_data(timestamps, prices)
+        
+        buy_timestamps, buy_signals = self.get_buy_signals(symbol, price_data)
+        chart.add_buy_signals(buy_timestamps, buy_signals)
+        
+        active_trade = self.get_active_trade(symbol)
         if active_trade:
             buy_price = active_trade['buy_price']
             target_sell_price = buy_price * (1 + self.bot.profits.get(symbol, 0))
-            fig.add_hline(y=buy_price, line_dash="dash", annotation_text="Buy Price", line_color="blue")
-            fig.add_hline(y=target_sell_price, line_dash="dot", annotation_text="Target Sell Price", line_color="red")
+            chart.add_trade_lines(buy_price, target_sell_price)
+        
+        return chart.fig
 
-        fig.update_layout(
-            title=f'{symbol} Price Chart',
-            xaxis_title='Timestamp',
-            yaxis_title='Price (USDT)',
-            height=self.config['chart_config']['height'],
-            width=self.config['chart_config']['width'],
-            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
-        )
-
-        return fig
-
-    @handle_errors
     def create_total_profit_chart(self) -> go.Figure:
         timestamps = [status['timestamp'] for status in self.bot.status_history]
         total_profits = [status['total_profit'] for status in self.bot.status_history]
+        
+        chart = ProfitChart()
+        chart.add_profit_data(timestamps, total_profits)
+        
+        return chart.fig
 
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=timestamps, y=total_profits, mode='lines', name='Total Profit'))
+    @staticmethod
+    def extract_price_data(price_data: List[Dict[str, Any]]) -> Tuple[List[datetime], List[float]]:
+        return [entry['timestamp'] for entry in price_data], [entry['price'] for entry in price_data]
 
-        fig.update_layout(
-            title='Total Profit Over Time',
-            xaxis_title='Timestamp',
-            yaxis_title='Total Profit (USDT)',
-            height=self.config['chart_config']['height'],
-            width=self.config['chart_config']['width']
-        )
+    def get_buy_signals(self, symbol: str, price_data: List[Dict[str, Any]]) -> Tuple[List[datetime], List[float]]:
+        buy_signals = []
+        buy_timestamps = []
+        for entry in price_data:
+            if self.bot.should_buy(symbol, entry['price']) is not None:
+                buy_signals.append(entry['price'])
+                buy_timestamps.append(entry['timestamp'])
+        return buy_timestamps, buy_signals
 
-        return fig
-    
-    @handle_errors
-    def save_chart(self, fig: go.Figure, filename: str) -> None:
-        try:
-            fig.write_image(filename)
-            logger.info(f"Chart saved as {filename}")
-        except Exception as e:
-            logger.error(f"Error saving chart: {e}")
-            raise
+    def get_active_trade(self, symbol: str) -> Dict[str, Any]:
+        return next((trade for trade in self.bot.active_trades.values() if trade['symbol'] == symbol), None)
 
     def update_bot_data(self, bot):
         """Update the bot instance with fresh data"""
         self.bot = bot
-        # Refresh config in case it has changed
-        self.config = load_config()
+
+@handle_errors
+def save_chart(fig: go.Figure, filename: str) -> None:
+    fig.write_image(filename)
+    logger.info(f"Chart saved as {filename}")
