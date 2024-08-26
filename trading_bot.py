@@ -169,18 +169,3 @@ async def create_trading_bot(update_interval: int) -> TradingBot:
     bot = TradingBot(update_interval)
     await bot.initialize()
     return bot
-
-if __name__ == "__main__":
-    async def run_test():
-        config = await load_config()
-        bot = await create_trading_bot(config['bot_config']['update_interval'])
-        
-        # Run a single trading iteration
-        symbols = config['default_trading_symbols']
-        profit_margin = config['default_profit_margin']
-        num_orders = config['default_num_orders']
-        
-        status = await bot.run_trading_iteration(symbols, profit_margin, num_orders)
-        print("Current trading status:", status)
-
-    asyncio.run(run_test())
