@@ -2,38 +2,35 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
 from typing import Dict, List, Any
-import asyncio
 import logging
 from config import load_config
-from trading_loop import handle_trading_errors
+from trading_loop import handle_errors
 
 logger = logging.getLogger(__name__)
 
 class ChartCreator:
     def __init__(self, bot):
         self.bot = bot
-        self.config = asyncio.run(load_config())
+        self.config = load_config()
 
-    @handle_trading_errors
-    async def create_charts_async(self) -> Dict[str, Any]:
-        individual_price_charts = await self.create_individual_price_charts_async()
-        total_profit_fig = await self.create_total_profit_chart_async()
+    @handle_errors
+    def create_charts(self) -> Dict[str, Any]:
+        individual_price_charts = self.create_individual_price_charts()
+        total_profit_fig = self.create_total_profit_chart()
         
         return {
             'individual_price_charts': individual_price_charts,
             'total_profit': total_profit_fig
         }
 
-    @handle_trading_errors
-    async def create_individual_price_charts_async(self) -> Dict[str, go.Figure]:
+    @handle_errors
+    def create_individual_price_charts(self) -> Dict[str, go.Figure]:
         charts = {}
-        tasks = [self.create_single_price_chart_async(symbol) for symbol in self.bot.symbol_allocations]
-        results = await asyncio.gather(*tasks)
-        for symbol, chart in zip(self.bot.symbol_allocations, results):
-            charts[symbol] = chart
+        for symbol in self.bot.symbol_allocations:
+            charts[symbol] = self.create_single_price_chart(symbol)
         return charts
 
-    async def create_single_price_chart_async(self, symbol: str) -> go.Figure:
+    def create_single_price_chart(self, symbol: str) -> go.Figure:
         fig = go.Figure()
 
         price_data = self.bot.price_history.get(symbol, [])
@@ -45,7 +42,7 @@ class ChartCreator:
         buy_signals = []
         buy_timestamps = []
         for entry in price_data:
-            should_buy = await self.bot.should_buy(symbol, entry['price'])
+            should_buy = self.bot.should_buy(symbol, entry['price'])
             if should_buy is not None:
                 buy_signals.append(entry['price'])
                 buy_timestamps.append(entry['timestamp'])
@@ -76,8 +73,8 @@ class ChartCreator:
 
         return fig
 
-    @handle_trading_errors
-    async def create_total_profit_chart_async(self) -> go.Figure:
+    @handle_errors
+    def create_total_profit_chart(self) -> go.Figure:
         timestamps = [status['timestamp'] for status in self.bot.status_history]
         total_profits = [status['total_profit'] for status in self.bot.status_history]
 
@@ -94,17 +91,17 @@ class ChartCreator:
 
         return fig
     
-    @handle_trading_errors
-    async def save_chart_async(self, fig: go.Figure, filename: str) -> None:
+    @handle_errors
+    def save_chart(self, fig: go.Figure, filename: str) -> None:
         try:
-            await asyncio.to_thread(fig.write_image, filename)
+            fig.write_image(filename)
             logger.info(f"Chart saved as {filename}")
         except Exception as e:
             logger.error(f"Error saving chart: {e}")
             raise
 
-    async def update_bot_data(self, bot):
-        """Update the bot instance with fresh data asynchronously"""
+    def update_bot_data(self, bot):
+        """Update the bot instance with fresh data"""
         self.bot = bot
         # Refresh config in case it has changed
-        self.config = await load_config()
+        self.config = load_config()
