@@ -3,7 +3,6 @@ from typing import Dict, List, Tuple, Optional
 import logging
 import asyncio
 from kucoin.client import Market, Trade, User
-from kucoin.exceptions import KucoinAPIException
 from config import kucoin_client_manager
 
 logger = logging.getLogger(__name__)
@@ -85,8 +84,6 @@ class Wallet:
                         ticker = await asyncio.to_thread(market_client.get_ticker, f"{currency.symbol}-USDT")
                         price = float(ticker['price'])
                         total_usdt += currency.balance * price
-        except KucoinAPIException as e:
-            logger.error(f"KuCoin API error fetching total balance: {e}")
         except Exception as e:
             logger.error(f"Unexpected error fetching total balance: {e}")
         return total_usdt
@@ -142,8 +139,6 @@ class Wallet:
                     balance = float(account['balance'])
                     await self.update_account_balance(account_type, symbol, balance)
             logger.info(f"Wallet synchronized with exchange for account type: {account_type}")
-        except KucoinAPIException as e:
-            logger.error(f"KuCoin API error synchronizing wallet: {e}")
         except Exception as e:
             logger.error(f"Unexpected error synchronizing wallet: {e}")
 
