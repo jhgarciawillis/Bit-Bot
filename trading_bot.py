@@ -6,16 +6,15 @@ from typing import Dict, List, Optional, Tuple
 from wallet import create_wallet
 from config import load_config, fetch_real_time_prices, place_spot_order, kucoin_client_manager
 from kucoin.client import User
-import asyncio
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 def handle_trading_errors(func):
-    async def wrapper(*args, **kwargs):
+    def wrapper(*args, **kwargs):
         try:
-            return await func(*args, **kwargs)
+            return func(*args, **kwargs)
         except Exception as e:
             logger.error(f"An error occurred in {func.__name__}: {str(e)}")
     return wrapper
@@ -33,23 +32,23 @@ class TradingBot:
         self.avg_profit_per_trade: float = 0
         self.status_history: List[Dict] = []
 
-    async def initialize(self) -> None:
-        self.config = await load_config()
+    def initialize(self) -> None:
+        self.config = load_config()
         self.is_simulation = self.config['simulation_mode']['enabled']
         self.usdt_liquid_percentage = self.config['default_usdt_liquid_percentage']
         self.PRICE_HISTORY_LENGTH = self.config['chart_config']['history_length']
-        self.wallet = await create_wallet()
+        self.wallet = create_wallet()
         if not self.is_simulation:
-            await self.update_wallet_balances()
+            self.update_wallet_balances()
 
     @handle_trading_errors
-    async def update_wallet_balances(self) -> None:
+    def update_wallet_balances(self) -> None:
         try:
             user_client = kucoin_client_manager.get_client(User)
-            accounts = await asyncio.to_thread(user_client.get_account_list)
+            accounts = user_client.get_account_list()
             for account in accounts:
                 if account['type'] == 'trade':
-                    await self.wallet.update_account_balance("trading", account['currency'], float(account['available']))
+                    self.wallet.update_account_balance("trading", account['currency'], float(account['available']))
             logger.info(f"Updated wallet balances: {self.wallet.get_account_summary()}")
         except Exception as e:
             logger.error(f"Error updating wallet balances: {e}")
@@ -60,7 +59,7 @@ class TradingBot:
     def get_tradable_balance(self, currency: str = 'USDT') -> float:
         return self.wallet.get_currency_balance("trading", currency)
 
-    async def get_user_allocations(self, user_selected_symbols: List[str], total_usdt_balance: float) -> Tuple[Dict[str, float], float]:
+    def get_user_allocations(self, user_selected_symbols: List[str], total_usdt_balance: float) -> Tuple[Dict[str, float], float]:
         tradable_usdt_amount = total_usdt_balance * (1 - self.usdt_liquid_percentage)
         
         if tradable_usdt_amount <= 0 or not user_selected_symbols:
@@ -73,7 +72,7 @@ class TradingBot:
         
         return symbol_allocations, tradable_usdt_amount
 
-    async def update_price_history(self, symbols: List[str], prices: Dict[str, float]) -> None:
+    def update_price_history(self, symbols: List[str], prices: Dict[str, float]) -> None:
         for symbol in symbols:
             if symbol not in self.price_history:
                 self.price_history[symbol] = deque(maxlen=self.PRICE_HISTORY_LENGTH)
@@ -82,9 +81,9 @@ class TradingBot:
                     'timestamp': datetime.now(),
                     'price': prices[symbol]
                 })
-                await self.wallet.update_currency_price("trading", symbol, prices[symbol])
+                self.wallet.update_currency_price("trading", symbol, prices[symbol])
 
-    async def should_buy(self, symbol: str, current_price: float) -> Optional[float]:
+    def should_buy(self, symbol: str, current_price: float) -> Optional[float]:
         if current_price is None or len(self.price_history[symbol]) < self.PRICE_HISTORY_LENGTH:
             return None
         
@@ -98,9 +97,9 @@ class TradingBot:
         return None
 
     @handle_trading_errors
-    async def place_buy_order(self, symbol: str, amount_usdt: float, limit_price: float) -> Optional[Dict]:
+    def place_buy_order(self, symbol: str, amount_usdt: float, limit_price: float) -> Optional[Dict]:
         amount_crypto = amount_usdt / limit_price
-        order = await place_spot_order(symbol, 'buy', limit_price, amount_crypto, self.is_simulation)
+        order = place_spot_order(symbol, 'buy', limit_price, amount_crypto, self.is_simulation)
         
         if order:
             self.active_trades[order['orderId']] = {
@@ -110,21 +109,21 @@ class TradingBot:
                 'fee': float(order['fee']),
                 'buy_time': datetime.now()
             }
-            await self.wallet.update_wallet_state("trading", symbol, float(order['amount']), float(order['price']), 'buy')
+            self.wallet.update_wallet_state("trading", symbol, float(order['amount']), float(order['price']), 'buy')
             return order
         return None
 
     @handle_trading_errors
-    async def place_sell_order(self, symbol: str, amount_crypto: float, target_sell_price: float) -> Optional[Dict]:
-        order = await place_spot_order(symbol, 'sell', target_sell_price, amount_crypto, self.is_simulation)
+    def place_sell_order(self, symbol: str, amount_crypto: float, target_sell_price: float) -> Optional[Dict]:
+        order = place_spot_order(symbol, 'sell', target_sell_price, amount_crypto, self.is_simulation)
         
         if order:
-            await self.wallet.update_wallet_state("trading", symbol, float(order['amount']), float(order['price']), 'sell')
+            self.wallet.update_wallet_state("trading", symbol, float(order['amount']), float(order['price']), 'sell')
             return order
         return None
 
-    async def get_current_status(self, prices: Dict[str, float]) -> Dict:
-        current_total_usdt = await self.wallet.get_total_balance_in_usdt()
+    def get_current_status(self, prices: Dict[str, float]) -> Dict:
+        current_total_usdt = self.wallet.get_total_balance_in_usdt()
         liquid_usdt = current_total_usdt * self.usdt_liquid_percentage
         tradable_usdt = max(current_total_usdt - liquid_usdt, 0)
         
@@ -164,7 +163,7 @@ class TradingBot:
                 equal_allocation = tradable_usdt / len(self.symbol_allocations)
                 self.symbol_allocations = {symbol: equal_allocation for symbol in self.symbol_allocations}
 
-async def create_trading_bot(update_interval: int) -> TradingBot:
+def create_trading_bot(update_interval: int) -> TradingBot:
     bot = TradingBot(update_interval)
-    await bot.initialize()
+    bot.initialize()
     return bot
