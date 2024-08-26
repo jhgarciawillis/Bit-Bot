@@ -56,10 +56,10 @@ class KucoinClientManager:
             cls._instance.user_client = None
         return cls._instance
 
-    async def initialize(self, api_key: str, api_secret: str, api_passphrase: str) -> None:
-        self.market_client = Market(key=api_key, secret=api_secret, passphrase=api_passphrase, url="https://api.kucoin.com")
-        self.trade_client = Trade(key=api_key, secret=api_secret, passphrase=api_passphrase, url="https://api.kucoin.com")
-        self.user_client = User(key=api_key, secret=api_secret, passphrase=api_passphrase, url="https://api.kucoin.com")
+    async def initialize(self, api_key: str, api_secret: str, api_passphrase: str, api_url: str) -> None:
+        self.market_client = Market(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
+        self.trade_client = Trade(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
+        self.user_client = User(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
 
     def get_client(self, client_type: type) -> Any:
         if client_type == Market:
@@ -75,7 +75,7 @@ kucoin_client_manager = KucoinClientManager()
 
 async def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
     """
-    Load configuration from a YAML file and Streamlit secrets asynchronously.
+    Load configuration from a YAML file and environment variables asynchronously.
     
     :param config_file: Path to the YAML configuration file
     :return: Dictionary containing the configuration
@@ -88,11 +88,12 @@ async def load_config(config_file: str = 'config.yaml') -> Dict[str, Any]:
         logger.warning(f"Configuration file {config_file} not found. Using default configuration.")
         config = {}
 
-    # Override with Streamlit secrets
-    config['api_key'] = st.secrets["api_credentials"]["api_key"]
-    config['api_secret'] = st.secrets["api_credentials"]["api_secret"]
-    config['api_passphrase'] = st.secrets["api_credentials"]["api_passphrase"]
-    config['live_trading_access_key'] = st.secrets["api_credentials"]["live_trading_access_key"]
+    # Load configuration from environment variables
+    config['api_key'] = os.environ.get('API_KEY')
+    config['api_secret'] = os.environ.get('API_SECRET')
+    config['api_passphrase'] = os.environ.get('API_PASSPHRASE')
+    config['api_url'] = os.environ.get('API_URL')
+    config['live_trading_access_key'] = os.environ.get('LIVE_TRADING_ACCESS_KEY')
     
     # Merge with default configurations
     config['simulation_mode'] = {**SIMULATION_MODE, **config.get('simulation_mode', {})}
@@ -162,7 +163,7 @@ def verify_live_trading_access(input_key: str) -> bool:
     :param input_key: The key input by the user
     :return: Boolean indicating whether the key is correct
     """
-    correct_key = st.secrets["api_credentials"]["live_trading_access_key"]
+    correct_key = os.environ.get('LIVE_TRADING_ACCESS_KEY')
     return input_key == correct_key
 
 async def fetch_real_time_prices(symbols: List[str], is_simulation: bool = False) -> Dict[str, float]:
@@ -230,7 +231,7 @@ async def place_spot_order(symbol: str, side: str, price: float, size: float, is
 
 async def initialize_kucoin_client(config: Dict[str, Any]) -> None:
     """Initialize the KuCoin client with the provided credentials."""
-    await kucoin_client_manager.initialize(config['api_key'], config['api_secret'], config['api_passphrase'])
+    await kucoin_client_manager.initialize(config['api_key'], config['api_secret'], config['api_passphrase'], config['api_url'])
 
 if __name__ == "__main__":
     # This block allows running config-related functions independently for testing
