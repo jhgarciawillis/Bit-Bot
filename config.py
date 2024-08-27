@@ -46,9 +46,14 @@ class KucoinClientManager:
         return cls._instance
 
     def initialize(self, api_key: str, api_secret: str, api_passphrase: str, api_url: str) -> None:
-        self.market_client = Market(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
-        self.trade_client = Trade(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
-        self.user_client = User(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
+        try:
+            self.market_client = Market(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
+            self.trade_client = Trade(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
+            self.user_client = User(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
+            logger.info("KuCoin clients initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize KuCoin clients: {e}")
+            raise
 
     def get_client(self, client_type: type) -> Any:
         if client_type == Market:
@@ -70,13 +75,17 @@ class ConfigManager:
 
     def load_config(self) -> Dict[str, Any]:
         config = DEFAULT_CONFIG.copy()
-        config.update({
-            'api_key': st.secrets["api_credentials"]["api_key"],
-            'api_secret': st.secrets["api_credentials"]["api_secret"],
-            'api_passphrase': st.secrets["api_credentials"]["api_passphrase"],
-            'api_url': 'https://api.kucoin.com',
-            'live_trading_access_key': st.secrets["api_credentials"]["live_trading_access_key"],
-        })
+        try:
+            config.update({
+                'api_key': st.secrets["api_credentials"]["api_key"],
+                'api_secret': st.secrets["api_credentials"]["api_secret"],
+                'api_passphrase': st.secrets["api_credentials"]["api_passphrase"],
+                'api_url': 'https://api.kucoin.com',
+                'live_trading_access_key': st.secrets["api_credentials"]["live_trading_access_key"],
+            })
+        except KeyError as e:
+            logger.error(f"Missing API credential in Streamlit secrets: {e}")
+            raise
         return config
 
     def validate_trading_symbols(self, symbols: List[str]) -> List[str]:
@@ -137,12 +146,16 @@ class ConfigManager:
             return {}
 
     def initialize_kucoin_client(self) -> None:
-        kucoin_client_manager.initialize(
-            st.secrets["api_credentials"]["api_key"],
-            st.secrets["api_credentials"]["api_secret"],
-            st.secrets["api_credentials"]["api_passphrase"],
-            'https://api.kucoin.com'
-        )
+        try:
+            kucoin_client_manager.initialize(
+                st.secrets["api_credentials"]["api_key"],
+                st.secrets["api_credentials"]["api_secret"],
+                st.secrets["api_credentials"]["api_passphrase"],
+                'https://api.kucoin.com'
+            )
+        except KeyError as e:
+            logger.error(f"Missing API credential in Streamlit secrets: {e}")
+            raise
 
     def get_account_list(self) -> List[Dict[str, Any]]:
         try:
