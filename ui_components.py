@@ -55,7 +55,7 @@ class StatusTable(UIComponent):
             'Symbol': symbols,
             'Current Price': [self._format_price(current_status['prices'].get(symbol)) for symbol in symbols],
             'Buy Price': [self._format_buy_price(current_status['active_trades'], symbol) for symbol in symbols],
-            'Target Sell Price': [self._format_target_sell_price(current_status['active_trades'], symbol) for symbol in symbols],
+            'Target Sell Price': [self._format_target_sell_price(current_status['active_trades'], symbol, self.bot.profits.get(symbol, 0)) for symbol in symbols],
             'Current P/L': [self._format_current_pl(current_status['prices'], current_status['active_trades'], symbol) for symbol in symbols],
             'Active Trade': [self._format_active_trade(current_status['active_trades'], symbol) for symbol in symbols],
             'Realized Profit': [self._format_realized_profit(current_status['profits'], symbol) for symbol in symbols],
@@ -85,9 +85,10 @@ class StatusTable(UIComponent):
         buy_order = next((trade for trade in active_trades.values() if trade['symbol'] == symbol), None)
         return f"{buy_order['buy_price']:.4f} USDT" if buy_order else 'N/A'
 
-    def _format_target_sell_price(self, active_trades: Dict[str, Dict[str, Any]], symbol: str) -> str:
+    @staticmethod
+    def _format_target_sell_price(active_trades: Dict[str, Dict[str, Any]], symbol: str, profit_margin: float) -> str:
         buy_order = next((trade for trade in active_trades.values() if trade['symbol'] == symbol), None)
-        return f"{buy_order['buy_price'] * (1 + self.bot.profits.get(symbol, 0)):.4f} USDT" if buy_order else 'N/A'
+        return f"{buy_order['buy_price'] * (1 + profit_margin):.4f} USDT" if buy_order and profit_margin is not None else 'N/A'
 
     @staticmethod
     def _format_current_pl(prices: Dict[str, float], active_trades: Dict[str, Dict[str, Any]], symbol: str) -> str:
@@ -150,7 +151,7 @@ class TradingParameters(UIComponent):
             "Profit Margin Percentage (0-100%)",
             min_value=0.0001,
             max_value=100.0,
-            value=config_manager.get_config('profit_margin') * 100,
+            value=config_manager.get_config('profit_margin') * 100 if config_manager.get_config('profit_margin') is not None else 0,
             step=0.0001,
             format="%.4f",
             key='profit_margin_percentage'
@@ -160,7 +161,7 @@ class TradingParameters(UIComponent):
             "Number of Orders",
             min_value=1,
             max_value=10,
-            value=config_manager.get_config('num_orders'),
+            value=config_manager.get_config('num_orders') if config_manager.get_config('num_orders') is not None else 1,
             step=1,
             key='num_orders_per_trade'
         )
