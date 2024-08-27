@@ -105,11 +105,11 @@ def main():
 
             logger.info("Displaying trading parameters...")
             logger.info("Calling ui_manager.display_component('trading_parameters')")
-            profit_margin_percentage, num_orders_per_trade = ui_manager.display_component('trading_parameters')
-            logger.info(f"Received profit_margin_percentage: {profit_margin_percentage}, num_orders_per_trade: {num_orders_per_trade}")
+            usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade = ui_manager.display_component('trading_parameters')
+            logger.info(f"Received usdt_liquid_percentage: {usdt_liquid_percentage}, profit_margin_percentage: {profit_margin_percentage}, num_orders_per_trade: {num_orders_per_trade}")
 
-            # Check if the returned values are not None
-            if profit_margin_percentage is None or num_orders_per_trade is None:
+            # Check if the returned values are valid
+            if profit_margin_percentage is None or num_orders_per_trade is None or usdt_liquid_percentage is None:
                 logger.error("Invalid trading parameters. Please check your configuration.")
                 st.error("Invalid trading parameters. Please check your configuration.")
                 return
@@ -121,7 +121,8 @@ def main():
             st.session_state.user_inputs = {
                 'user_selected_symbols': user_selected_symbols,
                 'profit_margin_percentage': profit_margin_percentage,
-                'num_orders_per_trade': num_orders_per_trade
+                'num_orders_per_trade': num_orders_per_trade,
+                'usdt_liquid_percentage': usdt_liquid_percentage,
             }
 
             logger.info("Updating symbol allocations...")
