@@ -155,7 +155,7 @@ class TradingParameters(UIComponent):
             "Enter the percentage of your assets to keep liquid in USDT (0-100%)",
             min_value=0.0,
             max_value=100.0,
-            value=config_manager.get_config('usdt_liquid_percentage') * 100,
+            value=config_manager.get_config('usdt_liquid_percentage', 0.5) * 100,
             step=0.0001,
             format="%.4f",
             key='usdt_liquid_percentage'
@@ -165,7 +165,7 @@ class TradingParameters(UIComponent):
             "Profit Margin Percentage (0-100%)",
             min_value=0.0001,
             max_value=100.0,
-            value=config_manager.get_config('profit_margin', 0) * 100,
+            value=config_manager.get_config('profit_margin', 0.01) * 100,
             step=0.0001,
             format="%.4f",
             key='profit_margin_percentage'
