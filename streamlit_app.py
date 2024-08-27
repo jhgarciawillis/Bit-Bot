@@ -13,7 +13,7 @@ from wallet import create_wallet
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def initialize_bot(is_simulation: bool, simulated_usdt_balance: float = 0) -> TradingBot:
+def initialize_bot(is_simulation: bool, liquid_ratio: float) -> TradingBot:
     logger.info("Initializing bot...")
     bot = st.session_state.get('bot')
     if bot is None:
@@ -21,11 +21,9 @@ def initialize_bot(is_simulation: bool, simulated_usdt_balance: float = 0) -> Tr
         st.session_state['bot'] = bot
     
     bot.is_simulation = is_simulation
+    bot.wallet = create_wallet(is_simulation, liquid_ratio)
     
-    if is_simulation:
-        logger.info("Simulation mode enabled, updating USDT balance.")
-        bot.wallet.update_account_balance("trading", "USDT", simulated_usdt_balance)
-    else:
+    if not is_simulation:
         logger.info("Live trading mode, initializing bot.")
         bot.initialize()
     
@@ -62,7 +60,7 @@ def main():
             st.session_state.user_inputs = {}
 
         logger.info("Configuring sidebar...")
-        is_simulation, simulated_usdt_balance = ui_manager.display_component('sidebar_config')
+        is_simulation, liquid_ratio = ui_manager.display_component('sidebar_config')
 
         if is_simulation is not None:
             logger.info(f"Simulation mode: {is_simulation}")
@@ -72,7 +70,7 @@ def main():
                     return
             
             logger.info("Initializing bot...")
-            bot = initialize_bot(is_simulation, simulated_usdt_balance)
+            bot = initialize_bot(is_simulation, liquid_ratio)
             ui_manager.update_bot(bot)  # Update the bot in UIManager
 
             logger.info("Displaying wallet balance...")
@@ -97,7 +95,7 @@ def main():
                 return
 
             logger.info("Displaying trading parameters...")
-            usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade = ui_manager.display_component('trading_parameters')
+            profit_margin_percentage, num_orders_per_trade = ui_manager.display_component('trading_parameters')
 
             logger.info("Informing users about total fees and suggested profit margin.")
             st.sidebar.info("Please note that the total fees for buying and selling are 0.2%. It is recommended to set a profit margin higher than 0.2% to cover the fees.")
@@ -105,22 +103,12 @@ def main():
             logger.info("Saving user inputs to session state...")
             st.session_state.user_inputs = {
                 'user_selected_symbols': user_selected_symbols,
-                'usdt_liquid_percentage': usdt_liquid_percentage,
                 'profit_margin_percentage': profit_margin_percentage,
                 'num_orders_per_trade': num_orders_per_trade
             }
 
-            bot.usdt_liquid_percentage = usdt_liquid_percentage
-
-            logger.info("Getting user allocations...")
-            bot.symbol_allocations, tradable_usdt_amount = bot.get_user_allocations(user_selected_symbols, bot.wallet.get_total_balance_in_usdt())
-            if tradable_usdt_amount <= 0:
-                logger.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
-                st.warning("No USDT available for trading. Please adjust your liquid USDT percentage.")
-                return
-
-            logger.info(f"Tradable USDT Amount: {tradable_usdt_amount:.2f}")
-            st.sidebar.info(f"Tradable USDT Amount: {tradable_usdt_amount:.2f}")
+            logger.info("Updating symbol allocations...")
+            bot.update_allocations(user_selected_symbols)
 
             logger.info("Displaying trading controls...")
             start_button, stop_button = ui_manager.display_component('trading_controls')
