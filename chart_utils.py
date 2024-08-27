@@ -63,8 +63,9 @@ class PriceChart(Chart):
         self.add_marker_trace(sell_timestamps, sell_signals, f'{self.symbol} Sell Signal', 'triangle-down', 10, 'red')
 
     def add_trade_lines(self, buy_price: float, target_sell_price: float):
-        self.add_horizontal_line(buy_price, "dash", "Buy Price", "blue")
-        self.add_horizontal_line(target_sell_price, "dot", "Target Sell Price", "red")
+        if buy_price is not None and target_sell_price is not None:
+            self.add_horizontal_line(buy_price, "dash", "Buy Price", "blue")
+            self.add_horizontal_line(target_sell_price, "dot", "Target Sell Price", "red")
 
 class ProfitChart(Chart):
     def __init__(self):
@@ -112,7 +113,7 @@ class ChartCreator:
         active_trade = self.get_active_trade(symbol)
         if active_trade:
             buy_price = active_trade['buy_price']
-            target_sell_price = buy_price * (1 + self.bot.profits.get(symbol, 0))
+            target_sell_price = buy_price * (1 + self.bot.profits.get(symbol, 0) if self.bot.profits.get(symbol, 0) is not None else 0)
             chart.add_trade_lines(buy_price, target_sell_price)
         
         return chart.fig
@@ -154,7 +155,7 @@ class ChartCreator:
         sell_timestamps = []
         for entry in price_data:
             active_trade = self.get_active_trade(symbol)
-            if active_trade and entry['price'] >= active_trade['buy_price'] * (1 + self.bot.profits.get(symbol, 0)):
+            if active_trade and entry['price'] >= active_trade['buy_price'] * (1 + self.bot.profits.get(symbol, 0) if self.bot.profits.get(symbol, 0) is not None else 0):
                 sell_signals.append(entry['price'])
                 sell_timestamps.append(entry['timestamp'])
         return sell_timestamps, sell_signals
