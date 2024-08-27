@@ -1,7 +1,7 @@
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from datetime import datetime
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any, Tuple, Optional
 import logging
 from config import config_manager
 
@@ -62,7 +62,7 @@ class PriceChart(Chart):
     def add_sell_signals(self, sell_timestamps: List[datetime], sell_signals: List[float]):
         self.add_marker_trace(sell_timestamps, sell_signals, f'{self.symbol} Sell Signal', 'triangle-down', 10, 'red')
 
-    def add_trade_lines(self, buy_price: float, target_sell_price: float):
+    def add_trade_lines(self, buy_price: Optional[float], target_sell_price: Optional[float]):
         if buy_price is not None and target_sell_price is not None:
             self.add_horizontal_line(buy_price, "dash", "Buy Price", "blue")
             self.add_horizontal_line(target_sell_price, "dot", "Target Sell Price", "red")
@@ -160,7 +160,7 @@ class ChartCreator:
                 sell_timestamps.append(entry['timestamp'])
         return sell_timestamps, sell_signals
 
-    def get_active_trade(self, symbol: str) -> Dict[str, Any]:
+    def get_active_trade(self, symbol: str) -> Optional[Dict[str, Any]]:
         return next((trade for trade in self.bot.active_trades.values() if trade['symbol'] == symbol), None)
 
     def update_bot_data(self, bot):
