@@ -59,6 +59,9 @@ class PriceChart(Chart):
     def add_buy_signals(self, buy_timestamps: List[datetime], buy_signals: List[float]):
         self.add_marker_trace(buy_timestamps, buy_signals, f'{self.symbol} Buy Signal', 'triangle-up', 10, 'green')
 
+    def add_sell_signals(self, sell_timestamps: List[datetime], sell_signals: List[float]):
+        self.add_marker_trace(sell_timestamps, sell_signals, f'{self.symbol} Sell Signal', 'triangle-down', 10, 'red')
+
     def add_trade_lines(self, buy_price: float, target_sell_price: float):
         self.add_horizontal_line(buy_price, "dash", "Buy Price", "blue")
         self.add_horizontal_line(target_sell_price, "dot", "Target Sell Price", "red")
@@ -70,6 +73,14 @@ class ProfitChart(Chart):
     def add_profit_data(self, timestamps: List[datetime], total_profits: List[float]):
         self.add_line_trace(timestamps, total_profits, 'Total Profit')
 
+class BalanceChart(Chart):
+    def __init__(self):
+        super().__init__('Balance Over Time', 'Timestamp', 'Balance (USDT)')
+
+    def add_balance_data(self, timestamps: List[datetime], liquid_balances: List[float], trading_balances: List[float]):
+        self.add_line_trace(timestamps, liquid_balances, 'Liquid Balance')
+        self.add_line_trace(timestamps, trading_balances, 'Trading Balance')
+
 class ChartCreator:
     def __init__(self, bot):
         self.bot = bot
@@ -78,7 +89,8 @@ class ChartCreator:
     def create_charts(self) -> Dict[str, Any]:
         return {
             'individual_price_charts': self.create_individual_price_charts(),
-            'total_profit': self.create_total_profit_chart()
+            'total_profit': self.create_total_profit_chart(),
+            'balance': self.create_balance_chart()
         }
 
     def create_individual_price_charts(self) -> Dict[str, go.Figure]:
@@ -93,6 +105,9 @@ class ChartCreator:
         
         buy_timestamps, buy_signals = self.get_buy_signals(symbol, price_data)
         chart.add_buy_signals(buy_timestamps, buy_signals)
+        
+        sell_timestamps, sell_signals = self.get_sell_signals(symbol, price_data)
+        chart.add_sell_signals(sell_timestamps, sell_signals)
         
         active_trade = self.get_active_trade(symbol)
         if active_trade:
@@ -111,6 +126,16 @@ class ChartCreator:
         
         return chart.fig
 
+    def create_balance_chart(self) -> go.Figure:
+        timestamps = [status['timestamp'] for status in self.bot.status_history]
+        liquid_balances = [status['liquid_usdt'] for status in self.bot.status_history]
+        trading_balances = [status['tradable_usdt'] for status in self.bot.status_history]
+        
+        chart = BalanceChart()
+        chart.add_balance_data(timestamps, liquid_balances, trading_balances)
+        
+        return chart.fig
+
     @staticmethod
     def extract_price_data(price_data: List[Dict[str, Any]]) -> Tuple[List[datetime], List[float]]:
         return [entry['timestamp'] for entry in price_data], [entry['price'] for entry in price_data]
@@ -123,6 +148,16 @@ class ChartCreator:
                 buy_signals.append(entry['price'])
                 buy_timestamps.append(entry['timestamp'])
         return buy_timestamps, buy_signals
+
+    def get_sell_signals(self, symbol: str, price_data: List[Dict[str, Any]]) -> Tuple[List[datetime], List[float]]:
+        sell_signals = []
+        sell_timestamps = []
+        for entry in price_data:
+            active_trade = self.get_active_trade(symbol)
+            if active_trade and entry['price'] >= active_trade['buy_price'] * (1 + self.bot.profits.get(symbol, 0)):
+                sell_signals.append(entry['price'])
+                sell_timestamps.append(entry['timestamp'])
+        return sell_timestamps, sell_signals
 
     def get_active_trade(self, symbol: str) -> Dict[str, Any]:
         return next((trade for trade in self.bot.active_trades.values() if trade['symbol'] == symbol), None)
