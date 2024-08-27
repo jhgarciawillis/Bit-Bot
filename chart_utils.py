@@ -26,8 +26,8 @@ class Chart:
             title=title,
             xaxis_title=x_title,
             yaxis_title=y_title,
-            height=config_manager.config['chart_config']['height'],
-            width=config_manager.config['chart_config']['width'],
+            height=config_manager.get_config('chart_config')['height'],
+            width=config_manager.get_config('chart_config')['width'],
             legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
         )
 
