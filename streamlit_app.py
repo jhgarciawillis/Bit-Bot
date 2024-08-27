@@ -138,34 +138,17 @@ def main():
                     bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade
                 )
 
-            if st.session_state.is_trading:
-                logger.info("Trading is in progress, updating charts and status...")
+                # Update charts and status after starting the trading loop
+                logger.info("Updating charts and status...")
                 chart_creator = ChartCreator(bot)
-                chart_container = st.container()
-                status_container = st.container()
-                trade_messages_container = st.container()
-                last_update_time = datetime.now() - timedelta(seconds=31)  # Ensure first update happens immediately
+                charts = chart_creator.create_charts()
+                ui_manager.display_component('chart_display', charts=charts)
 
-                try:
-                    current_time = datetime.now()
-                    if (current_time - last_update_time).total_seconds() >= 30:
-                        logger.info("Updating charts and status...")
-                        charts = chart_creator.create_charts()
-                        ui_manager.display_component('chart_display', charts=charts, container=chart_container)
+                current_prices = config_manager.fetch_real_time_prices(user_selected_symbols)
+                current_status = bot.get_current_status(current_prices)
+                ui_manager.display_component('status_table', current_status=current_status)
 
-                        logger.info("Fetching current prices and updating status table...")
-                        current_prices = config_manager.fetch_real_time_prices(user_selected_symbols)
-                        current_status = bot.get_current_status(current_prices)
-                        ui_manager.display_component('status_table', current_status=current_status, container=status_container)
-
-                        logger.info("Displaying trade messages...")
-                        ui_manager.display_component('trade_messages', container=trade_messages_container)
-
-                        last_update_time = current_time
-
-                except Exception as e:
-                    logger.error(f"An error occurred in the main loop: {e}")
-                    ui_manager.display_component('error_message', error_message=str(e), container=error_container)
+                ui_manager.display_component('trade_messages')
 
             if stop_button or (not st.session_state.is_trading and st.session_state.stop_event):
                 logger.info("Stopping trading...")
@@ -175,7 +158,8 @@ def main():
                     st.session_state.stop_event = None
                     st.session_state.trading_task = None
                 st.sidebar.success("Trading stopped.")
-                chart_container.empty()
+                ui_manager.display_component('chart_display', charts={})  # Clear the charts
+                ui_manager.display_component('status_table', current_status={})  # Clear the status table
 
     except Exception as e:
         logger.error(f"An error occurred in the main function: {e}")
