@@ -102,8 +102,8 @@ class Wallet:
             for currency in account.currencies.values():
                 if currency.symbol == 'USDT':
                     total_usdt += currency.balance
-                else:
-                    total_usdt += currency.balance * (currency.current_price or 0)
+                elif currency.current_price is not None:
+                    total_usdt += currency.balance * currency.current_price
         logger.info(f"Total {account_type} account balance: {total_usdt:.2f} USDT")
         return total_usdt
 
