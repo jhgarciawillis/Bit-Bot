@@ -30,6 +30,8 @@ class TradingBot:
         self.total_trades: int = 0
         self.avg_profit_per_trade: float = 0
         self.status_history: List[Dict] = []
+        self.is_simulation: bool = False
+        self.usdt_liquid_percentage: float = 0.5
 
     def initialize(self) -> None:
         self.is_simulation = config_manager.get_config('simulation_mode')['enabled']
