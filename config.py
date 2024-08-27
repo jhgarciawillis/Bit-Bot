@@ -64,6 +64,8 @@ kucoin_client_manager = KucoinClientManager()
 
 class ConfigManager:
     def __init__(self):
+        self.config = None
+        self.initialize_kucoin_client()
         self.config = self.load_config()
 
     def load_config(self) -> Dict[str, Any]:
@@ -75,7 +77,6 @@ class ConfigManager:
             'api_url': 'https://api.kucoin.com',
             'live_trading_access_key': st.secrets["api_credentials"]["live_trading_access_key"],
         })
-        config['trading_symbols'] = self.validate_trading_symbols(config['trading_symbols'])
         return config
 
     def validate_trading_symbols(self, symbols: List[str]) -> List[str]:
@@ -93,7 +94,7 @@ class ConfigManager:
             return [symbol['symbol'] for symbol in symbols if symbol['quoteCurrency'] == 'USDT']
         except Exception as e:
             logger.error(f"Unexpected error fetching symbol list: {e}")
-            return self.config['trading_symbols']
+            return []
 
     def verify_live_trading_access(self, input_key: str) -> bool:
         return input_key == self.config['live_trading_access_key']
@@ -137,10 +138,10 @@ class ConfigManager:
 
     def initialize_kucoin_client(self) -> None:
         kucoin_client_manager.initialize(
-            self.config['api_key'],
-            self.config['api_secret'],
-            self.config['api_passphrase'],
-            self.config['api_url']
+            st.secrets["api_credentials"]["api_key"],
+            st.secrets["api_credentials"]["api_secret"],
+            st.secrets["api_credentials"]["api_passphrase"],
+            'https://api.kucoin.com'
         )
 
     def get_account_list(self) -> List[Dict[str, Any]]:
@@ -161,7 +162,6 @@ config_manager = ConfigManager()
 
 if __name__ == "__main__":
     print("Loaded configuration:", config_manager.config)
-    config_manager.initialize_kucoin_client()
     symbols = config_manager.get_available_trading_symbols()
     print("Available trading symbols:", symbols)
     prices = config_manager.fetch_real_time_prices(config_manager.config['trading_symbols'])
