@@ -79,7 +79,7 @@ def main():
             ui_manager.display_component('wallet_balance')
 
             logger.info("Displaying simulation indicator...")
-            ui_manager.display_component('simulation_indicator', is_simulation)
+            ui_manager.display_component('simulation_indicator', is_simulation=is_simulation)
 
             logger.info("Fetching available trading symbols...")
             available_symbols = config_manager.get_available_trading_symbols()
@@ -89,7 +89,7 @@ def main():
                 return
             
             logger.info("Displaying symbol selector...")
-            user_selected_symbols = ui_manager.display_component('symbol_selector', available_symbols, config_manager.get_config('trading_symbols'))
+            user_selected_symbols = ui_manager.display_component('symbol_selector', available_symbols=available_symbols, default_symbols=config_manager.get_config('trading_symbols'))
 
             if not user_selected_symbols:
                 logger.warning("No symbols selected for trading.")
@@ -145,12 +145,12 @@ def main():
                     if (current_time - last_update_time).total_seconds() >= 30:
                         logger.info("Updating charts and status...")
                         charts = chart_creator.create_charts()
-                        ui_manager.display_component('chart_display', charts, container=chart_container)
+                        ui_manager.display_component('chart_display', charts=charts, container=chart_container)
 
                         logger.info("Fetching current prices and updating status table...")
                         current_prices = config_manager.fetch_real_time_prices(user_selected_symbols)
                         current_status = bot.get_current_status(current_prices)
-                        ui_manager.display_component('status_table', current_status, container=status_container)
+                        ui_manager.display_component('status_table', current_status=current_status, container=status_container)
 
                         logger.info("Displaying trade messages...")
                         ui_manager.display_component('trade_messages', container=trade_messages_container)
