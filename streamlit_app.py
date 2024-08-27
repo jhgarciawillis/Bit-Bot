@@ -2,11 +2,11 @@ import streamlit as st
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any
+from config import config_manager
 from trading_bot import TradingBot, create_trading_bot
 from chart_utils import ChartCreator
 from trading_loop import initialize_trading_loop, stop_trading_loop
 from ui_components import UIManager
-from config import config_manager
 from wallet import create_wallet
 
 # Set up logging
@@ -44,6 +44,7 @@ def main():
     st.title("Cryptocurrency Trading Bot")
 
     error_container = st.container()
+    ui_manager = UIManager(None)  # Initialize UI manager at the beginning
 
     try:
         logger.info("Initializing KuCoin client...")
@@ -61,7 +62,6 @@ def main():
             st.session_state.user_inputs = {}
 
         logger.info("Configuring sidebar...")
-        ui_manager = UIManager(None)  # Initialize without a bot
         is_simulation, simulated_usdt_balance = ui_manager.display_component('sidebar_config')
 
         if is_simulation is not None:
