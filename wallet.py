@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 import logging
 from config import config_manager
+from kucoin.client import User
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +71,7 @@ class Wallet:
             'trading': Account('trading', config_manager.get_config('simulation_mode')['initial_balance']),
             'simulation': Account('simulation', config_manager.get_config('simulation_mode')['initial_balance'])
         }
+        self.is_simulation = config_manager.get_config('simulation_mode')['enabled']
 
     def update_account_balance(self, account_type: str, currency: str, balance: float, balance_type: str = 'trading') -> None:
         if account_type in self.accounts:
@@ -94,6 +96,12 @@ class Wallet:
             return 0.0
 
     def get_total_balance_in_usdt(self, account_type: str = 'trading') -> float:
+        if self.is_simulation:
+            return self._get_simulated_total_balance_in_usdt(account_type)
+        else:
+            return self._get_live_total_balance_in_usdt()
+
+    def _get_simulated_total_balance_in_usdt(self, account_type: str) -> float:
         total_usdt = 0
         if account_type in self.accounts:
             account = self.accounts[account_type]
@@ -102,8 +110,19 @@ class Wallet:
                     total_usdt += currency.balance
                 elif currency.current_price is not None:
                     total_usdt += currency.balance * currency.current_price
-        logger.info(f"Total {account_type} account balance: {total_usdt:.2f} USDT")
+        logger.info(f"Total simulated {account_type} account balance: {total_usdt:.2f} USDT")
         return total_usdt
+
+    def _get_live_total_balance_in_usdt(self) -> float:
+        try:
+            user_client = config_manager.kucoin_client_manager.get_client(User)
+            accounts = user_client.get_account_list()
+            total_usdt = sum(float(account['balance']) for account in accounts if account['currency'] == 'USDT')
+            logger.info(f"Total live trading account balance: {total_usdt:.2f} USDT")
+            return total_usdt
+        except Exception as e:
+            logger.error(f"Failed to fetch live total balance: {e}")
+            return 0.0
 
     def get_account_summary(self) -> Dict[str, Dict[str, Dict[str, float]]]:
         return {
@@ -146,12 +165,13 @@ class Wallet:
         return 0.0
 
     def sync_with_exchange(self, account_type: str, liquid_ratio: float) -> None:
-        if account_type == 'simulation':
+        if self.is_simulation:
             logger.warning("Syncing wallet with exchange is not applicable in simulation mode")
             return
 
         try:
-            accounts = config_manager.get_account_list()
+            user_client = config_manager.kucoin_client_manager.get_client(User)
+            accounts = user_client.get_account_list()
             for account in accounts:
                 if account['type'] == 'trade':
                     symbol = account['currency']
@@ -166,6 +186,7 @@ class Wallet:
 
 def create_wallet(is_simulation: bool, liquid_ratio: float = 0.5) -> Wallet:
     wallet = Wallet()
+    wallet.is_simulation = is_simulation
     if not is_simulation:
         wallet.sync_with_exchange('trading', liquid_ratio)
     return wallet
