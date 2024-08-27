@@ -37,39 +37,36 @@ class TradingBot:
         self.is_simulation = config_manager.get_config('simulation_mode')['enabled']
         self.usdt_liquid_percentage = config_manager.get_config('usdt_liquid_percentage')
         self.PRICE_HISTORY_LENGTH = config_manager.get_config('chart_config')['history_length']
-        self.wallet = create_wallet()
+        self.wallet = create_wallet(self.is_simulation, self.usdt_liquid_percentage)
         if not self.is_simulation:
             self.update_wallet_balances()
 
     @handle_trading_errors
     def update_wallet_balances(self) -> None:
         try:
-            accounts = config_manager.get_account_list()
-            for account in accounts:
-                if account['type'] == 'trade':
-                    self.wallet.update_account_balance("trading", account['currency'], float(account['available']))
+            self.wallet.sync_with_exchange('trading', self.usdt_liquid_percentage)
             logger.info(f"Updated wallet balances: {self.wallet.get_account_summary()}")
         except Exception as e:
             logger.error(f"Error updating wallet balances: {e}")
 
-    def get_account_balance(self, currency: str = 'USDT') -> float:
-        return self.wallet.get_currency_balance("trading", currency)
-
     def get_tradable_balance(self, currency: str = 'USDT') -> float:
-        return self.wallet.get_currency_balance("trading", currency)
+        return self.wallet.get_currency_balance('trading', currency, 'trading')
 
-    def get_user_allocations(self, user_selected_symbols: List[str], total_usdt_balance: float) -> Tuple[Dict[str, float], float]:
-        tradable_usdt_amount = total_usdt_balance * (1 - self.usdt_liquid_percentage)
+    def get_liquid_balance(self, currency: str = 'USDT') -> float:
+        return self.wallet.get_currency_balance('trading', currency, 'liquid')
+
+    def get_user_allocations(self, user_selected_symbols: List[str]) -> Dict[str, float]:
+        tradable_usdt_amount = self.get_tradable_balance('USDT')
         
         if tradable_usdt_amount <= 0 or not user_selected_symbols:
-            return {}, 0
+            return {}
 
-        symbol_allocations = {symbol: 1 / len(user_selected_symbols) for symbol in user_selected_symbols}
+        symbol_allocations = {symbol: tradable_usdt_amount / len(user_selected_symbols) for symbol in user_selected_symbols}
         for symbol in user_selected_symbols:
             if symbol not in self.profits:
                 self.profits[symbol] = 0
         
-        return symbol_allocations, tradable_usdt_amount
+        return symbol_allocations
 
     def update_price_history(self, symbols: List[str], prices: Dict[str, float]) -> None:
         for symbol in symbols:
@@ -80,7 +77,7 @@ class TradingBot:
                     'timestamp': datetime.now(),
                     'price': prices[symbol]
                 })
-                self.wallet.update_currency_price("trading", symbol, prices[symbol])
+                self.wallet.update_currency_price('trading', symbol, prices[symbol])
 
     def should_buy(self, symbol: str, current_price: float) -> Optional[float]:
         if current_price is None or len(self.price_history[symbol]) < self.PRICE_HISTORY_LENGTH:
@@ -108,7 +105,7 @@ class TradingBot:
                 'fee': float(order['fee']),
                 'buy_time': datetime.now()
             }
-            self.wallet.update_wallet_state("trading", symbol, float(order['amount']), float(order['price']), 'buy')
+            self.wallet.update_wallet_state('trading', symbol, float(order['amount']), float(order['price']), 'buy')
             return order
         return None
 
@@ -117,14 +114,14 @@ class TradingBot:
         order = config_manager.place_spot_order(symbol, 'sell', target_sell_price, amount_crypto, self.is_simulation)
         
         if order:
-            self.wallet.update_wallet_state("trading", symbol, float(order['amount']), float(order['price']), 'sell')
+            self.wallet.update_wallet_state('trading', symbol, float(order['amount']), float(order['price']), 'sell')
             return order
         return None
 
     def get_current_status(self, prices: Dict[str, float]) -> Dict:
-        current_total_usdt = self.wallet.get_total_balance_in_usdt()
-        liquid_usdt = current_total_usdt * self.usdt_liquid_percentage
-        tradable_usdt = max(current_total_usdt - liquid_usdt, 0)
+        current_total_usdt = self.wallet.get_total_balance_in_usdt('trading')
+        liquid_usdt = self.get_liquid_balance('USDT')
+        tradable_usdt = self.get_tradable_balance('USDT')
         
         status = {
             'timestamp': datetime.now(),
@@ -148,19 +145,14 @@ class TradingBot:
         
         return status
 
-    def update_allocations(self, total_usdt: float, liquid_usdt_percentage: float) -> None:
-        liquid_usdt = total_usdt * liquid_usdt_percentage
-        tradable_usdt = max(total_usdt - liquid_usdt, 0)
-        if tradable_usdt == 0:
-            self.symbol_allocations = {symbol: 0 for symbol in self.symbol_allocations}
-        else:
-            total_allocation = sum(self.symbol_allocations.values())
-            if total_allocation > 0:
-                for symbol in self.symbol_allocations:
-                    self.symbol_allocations[symbol] = (self.symbol_allocations[symbol] / total_allocation) * tradable_usdt
-            else:
-                equal_allocation = tradable_usdt / len(self.symbol_allocations)
-                self.symbol_allocations = {symbol: equal_allocation for symbol in self.symbol_allocations}
+    def update_allocations(self, user_selected_symbols: List[str]) -> None:
+        self.symbol_allocations = self.get_user_allocations(user_selected_symbols)
+
+    def update_trading_balance_with_profit(self, symbol: str, profit: float) -> None:
+        self.wallet.update_account_balance('trading', 'USDT', self.get_tradable_balance('USDT') + profit, 'trading')
+        self.profits[symbol] += profit
+        self.total_profit += profit
+        self.avg_profit_per_trade = self.total_profit / self.total_trades if self.total_trades > 0 else 0
 
 def create_trading_bot(update_interval: int) -> TradingBot:
     bot = TradingBot(update_interval)
