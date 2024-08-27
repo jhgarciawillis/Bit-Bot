@@ -13,14 +13,15 @@ class UIComponent:
 class SidebarConfig(UIComponent):
     def display(self) -> Tuple[bool, Optional[float]]:
         st.sidebar.header("Configuration")
-        is_simulation = st.sidebar.checkbox("Simulation Mode", value=config_manager.get_config('simulation_mode')['enabled'])
+        is_simulation = st.sidebar.checkbox("Simulation Mode", value=config_manager.get_config('simulation_mode')['enabled'], key='is_simulation')
         if is_simulation:
             st.sidebar.write("Running in simulation mode. No real trades will be executed.")
             simulated_usdt_balance = st.sidebar.number_input(
                 "Simulated USDT Balance",
                 min_value=0.0,
                 value=config_manager.get_config('simulation_mode')['initial_balance'],
-                step=0.1
+                step=0.1,
+                key='simulated_usdt_balance'
             )
             return is_simulation, simulated_usdt_balance
         else:
@@ -58,6 +59,8 @@ class StatusTable(UIComponent):
             'Current P/L': [self._format_current_pl(current_status['prices'], current_status['active_trades'], symbol) for symbol in symbols],
             'Active Trade': [self._format_active_trade(current_status['active_trades'], symbol) for symbol in symbols],
             'Realized Profit': [self._format_realized_profit(current_status['profits'], symbol) for symbol in symbols],
+            'Liquid Balance': [self._format_liquid_balance(current_status['wallet_summary'], symbol) for symbol in symbols],
+            'Trading Balance': [self._format_trading_balance(current_status['wallet_summary'], symbol) for symbol in symbols],
         }
 
     def _create_summary_data(self, current_status: Dict[str, Any]) -> Dict[str, List[Any]]:
@@ -69,6 +72,8 @@ class StatusTable(UIComponent):
             'Current P/L': ['', '', '', ''],
             'Active Trade': ['', '', '', ''],
             'Realized Profit': [f"{self.bot.total_profit:.4f}", '', '', ''],
+            'Liquid Balance': ['', '', '', f"{current_status['liquid_usdt']:.4f}"],
+            'Trading Balance': ['', f"{current_status['current_total_usdt']:.4f}", f"{current_status['tradable_usdt']:.4f}", ''],
         }
 
     @staticmethod
@@ -100,6 +105,14 @@ class StatusTable(UIComponent):
     def _format_realized_profit(profits: Dict[str, float], symbol: str) -> str:
         return f"{profits.get(symbol, 0):.4f}"
 
+    @staticmethod
+    def _format_liquid_balance(wallet_summary: Dict[str, Dict[str, Dict[str, float]]], symbol: str) -> str:
+        return f"{wallet_summary['trading'].get(symbol, {}).get('liquid', 0):.4f}"
+
+    @staticmethod
+    def _format_trading_balance(wallet_summary: Dict[str, Dict[str, Dict[str, float]]], symbol: str) -> str:
+        return f"{wallet_summary['trading'].get(symbol, {}).get('trading', 0):.4f}"
+
 class TradeMessages(UIComponent):
     def display(self) -> None:
         st.text("\n".join(st.session_state.trade_messages[-10:]))  # Display last 10 messages
@@ -119,7 +132,7 @@ class TradingControls(UIComponent):
 
 class SymbolSelector(UIComponent):
     def display(self, available_symbols: List[str], default_symbols: List[str]) -> List[str]:
-        return st.sidebar.multiselect("Select Symbols to Trade", available_symbols, default=default_symbols)
+        return st.sidebar.multiselect("Select Symbols to Trade", available_symbols, default=default_symbols, key='selected_symbols')
 
 class TradingParameters(UIComponent):
     def display(self) -> Tuple[float, float, int]:
@@ -129,7 +142,8 @@ class TradingParameters(UIComponent):
             max_value=100.0,
             value=config_manager.get_config('usdt_liquid_percentage') * 100,
             step=0.0001,
-            format="%.4f"
+            format="%.4f",
+            key='usdt_liquid_percentage'
         ) / 100
 
         profit_margin_percentage = st.sidebar.number_input(
@@ -138,7 +152,8 @@ class TradingParameters(UIComponent):
             max_value=100.0,
             value=config_manager.get_config('profit_margin') * 100,
             step=0.0001,
-            format="%.4f"
+            format="%.4f",
+            key='profit_margin_percentage'
         ) / 100
 
         num_orders_per_trade = st.sidebar.slider(
@@ -146,7 +161,8 @@ class TradingParameters(UIComponent):
             min_value=1,
             max_value=10,
             value=config_manager.get_config('num_orders'),
-            step=1
+            step=1,
+            key='num_orders_per_trade'
         )
 
         return usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade
@@ -169,8 +185,12 @@ class WalletBalance(UIComponent):
         self.bot = bot
 
     def display(self) -> None:
-        trading_account_balance = self.bot.get_account_balance('USDT')
-        st.sidebar.info(f"Trading Account Balance: {trading_account_balance:.2f} USDT")
+        total_balance = self.bot.wallet.get_total_balance_in_usdt()
+        liquid_usdt = self.bot.wallet.get_currency_balance('trading', 'USDT', 'liquid')
+        trading_usdt = self.bot.wallet.get_currency_balance('trading', 'USDT', 'trading')
+        st.sidebar.info(f"Total Balance: {total_balance:.2f} USDT")
+        st.sidebar.info(f"Liquid USDT: {liquid_usdt:.2f}")
+        st.sidebar.info(f"Trading USDT: {trading_usdt:.2f}")
 
 class LiveTradingVerification(UIComponent):
     def display(self) -> bool:
