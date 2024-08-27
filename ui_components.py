@@ -7,7 +7,7 @@ from config import config_manager
 logger = logging.getLogger(__name__)
 
 class UIComponent:
-    def display(self):
+    def display(self, *args, **kwargs):
         raise NotImplementedError("Subclasses must implement display method")
 
 class SidebarConfig(UIComponent):
@@ -102,7 +102,7 @@ class TradeMessages(UIComponent):
         st.text("\n".join(st.session_state.trade_messages[-10:]))  # Display last 10 messages
 
 class ErrorMessage(UIComponent):
-    def display(self) -> None:
+    def display(self, *args, **kwargs) -> None:
         if 'error_message' in st.session_state and st.session_state.error_message:
             st.error(st.session_state.error_message)
             st.session_state.error_message = ""  # Clear the error message after displaying
@@ -210,7 +210,11 @@ class UIManager:
         }
 
     def display_component(self, component_name: str, *args, **kwargs):
-        return self.components[component_name].display(*args, **kwargs)
+        if component_name in self.components:
+            return self.components[component_name].display(*args, **kwargs)
+        else:
+            logger.error(f"Component '{component_name}' not found")
+            st.error(f"UI component '{component_name}' not found")
 
     def initialize(self):
         initialize_session_state()
