@@ -30,10 +30,10 @@ class TradingLoop:
         while not stop_event.is_set():
             try:
                 self.trading_iteration()
-                time.sleep(config_manager.config['bot_config']['update_interval'])
+                time.sleep(config_manager.get_config('bot_config')['update_interval'])
             except Exception as e:
                 logger.error(f"An error occurred in the trading loop: {str(e)}")
-                time.sleep(config_manager.config['error_config']['retry_delay'])
+                time.sleep(config_manager.get_config('error_config')['retry_delay'])
 
     @handle_trading_errors
     def trading_iteration(self) -> None:
@@ -117,11 +117,11 @@ def stop_trading_loop(stop_event: threading.Event, trading_thread: threading.Thr
         logger.info("Trading loop stopped successfully.")
 
 if __name__ == "__main__":
-    bot = TradingBot(config_manager.config['bot_config']['update_interval'])
+    bot = TradingBot(config_manager.get_config('bot_config')['update_interval'])
     bot.initialize()
-    chosen_symbols = config_manager.config['default_trading_symbols']
-    profit_margin = config_manager.config['default_profit_margin']
-    num_orders = config_manager.config['default_num_orders']
+    chosen_symbols = config_manager.get_config('trading_symbols')
+    profit_margin = config_manager.get_config('profit_margin')
+    num_orders = config_manager.get_config('num_orders')
     
     stop_event, trading_thread = initialize_trading_loop(bot, chosen_symbols, profit_margin, num_orders)
     
