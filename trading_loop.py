@@ -52,7 +52,8 @@ class TradingLoop:
 
         self.bot.update_price_history([symbol], {symbol: current_price})
 
-        if symbol not in self.bot.active_trades:
+        active_trade_count = sum(1 for trade in self.bot.active_trades.values() if trade['symbol'] == symbol)
+        if active_trade_count < self.num_orders:
             self.check_buy_condition(symbol, current_price)
         else:
             self.check_sell_condition(symbol, current_price)
@@ -62,28 +63,24 @@ class TradingLoop:
         should_buy = self.bot.should_buy(symbol, current_price)
         if should_buy is not None:
             usdt_balance = self.bot.get_tradable_balance('USDT')
-            allocated_value = self.bot.symbol_allocations.get(symbol, 0) * usdt_balance
+            allocated_value = self.bot.symbol_allocations.get(symbol, 0)
             if allocated_value > 0:
-                order_amount = allocated_value / self.num_orders
-                for _ in range(self.num_orders):
-                    order = self.bot.place_buy_order(symbol, order_amount, should_buy)
-                    if order:
-                        logger.info(f"Placed buy order for {symbol}: {order_amount:.4f} USDT at {should_buy:.4f}")
+                order_amount = min(allocated_value, usdt_balance)
+                order = self.bot.place_buy_order(symbol, order_amount, should_buy)
+                if order:
+                    logger.info(f"Placed buy order for {symbol}: {order_amount:.4f} USDT at {should_buy:.4f}")
 
     @handle_trading_errors
     def check_sell_condition(self, symbol: str, current_price: float) -> None:
-        active_trade = next((trade for trade in self.bot.active_trades.values() if trade['symbol'] == symbol), None)
-        if active_trade:
+        active_trades = [trade for trade in self.bot.active_trades.values() if trade['symbol'] == symbol]
+        for active_trade in active_trades:
             target_sell_price = active_trade['buy_price'] * (1 + self.profit_margin)
             if current_price >= target_sell_price:
                 sell_amount = active_trade['amount']
                 sell_order = self.bot.place_sell_order(symbol, sell_amount, current_price)
                 if sell_order:
                     profit = (current_price - active_trade['buy_price']) * sell_amount - active_trade['fee'] - float(sell_order['fee'])
-                    self.bot.profits[symbol] = self.bot.profits.get(symbol, 0) + profit
-                    self.bot.total_profit += profit
-                    self.bot.total_trades += 1
-                    self.bot.avg_profit_per_trade = self.bot.total_profit / self.bot.total_trades
+                    self.bot.update_trading_balance_with_profit(symbol, profit)
                     logger.info(f"Sold {symbol}: {sell_amount:.8f} at {current_price:.4f}, Profit: {profit:.4f} USDT")
                     del self.bot.active_trades[active_trade['orderId']]
 
@@ -98,7 +95,7 @@ class TradingLoop:
             
             st.session_state.trade_messages = st.session_state.trade_messages[-10:]
 
-        self.bot.update_allocations(current_status['current_total_usdt'], self.bot.usdt_liquid_percentage)
+        self.bot.update_allocations(self.chosen_symbols)
 
 def initialize_trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: float, num_orders: int) -> Tuple[threading.Event, threading.Thread]:
     stop_event = threading.Event()
