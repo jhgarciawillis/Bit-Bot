@@ -17,8 +17,11 @@ def initialize_bot(is_simulation: bool, liquid_ratio: float) -> TradingBot:
     logger.info("Initializing bot...")
     bot = st.session_state.get('bot')
     if bot is None:
+        logger.info("Creating a new bot instance.")
         bot = create_trading_bot(config_manager.get_config('bot_config')['update_interval'])
         st.session_state['bot'] = bot
+    else:
+        logger.info("Using existing bot instance.")
     
     bot.is_simulation = is_simulation
     bot.wallet = create_wallet(is_simulation, liquid_ratio)
@@ -26,6 +29,8 @@ def initialize_bot(is_simulation: bool, liquid_ratio: float) -> TradingBot:
     if not is_simulation:
         logger.info("Live trading mode, initializing bot.")
         bot.initialize()
+    else:
+        logger.info("Simulation mode, no need to initialize bot.")
     
     logger.info("Bot initialized successfully.")
     return bot
@@ -51,12 +56,16 @@ def main():
         ui_manager.initialize()
 
         if 'is_trading' not in st.session_state:
+            logger.info("Initializing 'is_trading' in session state.")
             st.session_state.is_trading = False
         if 'stop_event' not in st.session_state:
+            logger.info("Initializing 'stop_event' in session state.")
             st.session_state.stop_event = None
         if 'trading_task' not in st.session_state:
+            logger.info("Initializing 'trading_task' in session state.")
             st.session_state.trading_task = None
         if 'user_inputs' not in st.session_state:
+            logger.info("Initializing 'user_inputs' in session state.")
             st.session_state.user_inputs = {}
 
         logger.info("Configuring sidebar...")
@@ -95,10 +104,13 @@ def main():
                 return
 
             logger.info("Displaying trading parameters...")
+            logger.info("Calling ui_manager.display_component('trading_parameters')")
             profit_margin_percentage, num_orders_per_trade = ui_manager.display_component('trading_parameters')
+            logger.info(f"Received profit_margin_percentage: {profit_margin_percentage}, num_orders_per_trade: {num_orders_per_trade}")
 
             # Check if the returned values are not None
             if profit_margin_percentage is None or num_orders_per_trade is None:
+                logger.error("Invalid trading parameters. Please check your configuration.")
                 st.error("Invalid trading parameters. Please check your configuration.")
                 return
 
