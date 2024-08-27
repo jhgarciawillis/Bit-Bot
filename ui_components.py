@@ -151,7 +151,7 @@ class TradingParameters(UIComponent):
             "Profit Margin Percentage (0-100%)",
             min_value=0.0001,
             max_value=100.0,
-            value=config_manager.get_config('profit_margin') * 100 if config_manager.get_config('profit_margin') is not None else 0,
+            value=config_manager.get_config('profit_margin', 0) * 100,
             step=0.0001,
             format="%.4f",
             key='profit_margin_percentage'
@@ -161,7 +161,7 @@ class TradingParameters(UIComponent):
             "Number of Orders",
             min_value=1,
             max_value=10,
-            value=config_manager.get_config('num_orders') if config_manager.get_config('num_orders') is not None else 1,
+            value=config_manager.get_config('num_orders', 1),
             step=1,
             key='num_orders_per_trade'
         )
