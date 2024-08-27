@@ -55,7 +55,7 @@ class StatusTable(UIComponent):
             'Symbol': symbols,
             'Current Price': [self._format_price(current_status['prices'].get(symbol)) for symbol in symbols],
             'Buy Price': [self._format_buy_price(current_status['active_trades'], symbol) for symbol in symbols],
-            'Target Sell Price': [self._format_target_sell_price(current_status['active_trades'], symbol, self.bot.profits.get(symbol, 0)) for symbol in symbols],
+            'Target Sell Price': [self._format_target_sell_price(current_status['active_trades'], symbol, self.bot.profits.get(symbol, 0) if self.bot.profits.get(symbol, 0) is not None else 0) for symbol in symbols],
             'Current P/L': [self._format_current_pl(current_status['prices'], current_status['active_trades'], symbol) for symbol in symbols],
             'Active Trade': [self._format_active_trade(current_status['active_trades'], symbol) for symbol in symbols],
             'Realized Profit': [self._format_realized_profit(current_status['profits'], symbol) for symbol in symbols],
