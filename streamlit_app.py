@@ -97,6 +97,11 @@ def main():
             logger.info("Displaying trading parameters...")
             profit_margin_percentage, num_orders_per_trade = ui_manager.display_component('trading_parameters')
 
+            # Check if the returned values are not None
+            if profit_margin_percentage is None or num_orders_per_trade is None:
+                st.error("Invalid trading parameters. Please check your configuration.")
+                return
+
             logger.info("Informing users about total fees and suggested profit margin.")
             st.sidebar.info("Please note that the total fees for buying and selling are 0.2%. It is recommended to set a profit margin higher than 0.2% to cover the fees.")
 
