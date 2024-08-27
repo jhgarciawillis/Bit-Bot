@@ -13,7 +13,7 @@ DEFAULT_CONFIG = {
     'trading_symbols': ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT'],
     'profit_margin': 0.01,  # 1%
     'num_orders': 1,
-    'usdt_liquid_percentage': 0.5,  # 50%
+    'liquid_ratio': 0.5,  # 50%
     'simulation_mode': {
         'enabled': True,
         'initial_balance': 1000.0,
