@@ -43,14 +43,14 @@ def main():
     st.set_page_config(layout="wide")
     st.title("Cryptocurrency Trading Bot")
 
-    error_container = st.container()
+    error_container = st.empty()
     ui_manager = UIManager(None)  # Initialize UI manager at the beginning
 
     try:
         logger.info("Initializing KuCoin client...")
         config_manager.initialize_kucoin_client()
         logger.info("Initializing session state...")
-        UIManager.initialize_session_state()
+        ui_manager.initialize()
 
         if 'is_trading' not in st.session_state:
             st.session_state.is_trading = False
@@ -73,7 +73,7 @@ def main():
             
             logger.info("Initializing bot...")
             bot = initialize_bot(is_simulation, simulated_usdt_balance)
-            ui_manager.bot = bot  # Update the bot in UIManager
+            ui_manager.update_bot(bot)  # Update the bot in UIManager
 
             logger.info("Displaying wallet balance...")
             ui_manager.display_component('wallet_balance')
@@ -159,7 +159,7 @@ def main():
 
                 except Exception as e:
                     logger.error(f"An error occurred in the main loop: {e}")
-                    ui_manager.display_component('error_message', container=error_container)
+                    ui_manager.display_component('error_message', error_message=str(e), container=error_container)
 
             if stop_button or (not st.session_state.is_trading and st.session_state.stop_event):
                 logger.info("Stopping trading...")
@@ -173,7 +173,7 @@ def main():
 
     except Exception as e:
         logger.error(f"An error occurred in the main function: {e}")
-        ui_manager.display_component('error_message', container=error_container)
+        ui_manager.display_component('error_message', error_message=str(e), container=error_container)
 
 if __name__ == "__main__":
     main()
