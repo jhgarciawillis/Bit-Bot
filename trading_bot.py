@@ -32,9 +32,9 @@ class TradingBot:
         self.status_history: List[Dict] = []
 
     def initialize(self) -> None:
-        self.is_simulation = config_manager.config['simulation_mode']['enabled']
-        self.usdt_liquid_percentage = config_manager.config['default_usdt_liquid_percentage']
-        self.PRICE_HISTORY_LENGTH = config_manager.config['chart_config']['history_length']
+        self.is_simulation = config_manager.get_config('simulation_mode')['enabled']
+        self.usdt_liquid_percentage = config_manager.get_config('usdt_liquid_percentage')
+        self.PRICE_HISTORY_LENGTH = config_manager.get_config('chart_config')['history_length']
         self.wallet = create_wallet()
         if not self.is_simulation:
             self.update_wallet_balances()
