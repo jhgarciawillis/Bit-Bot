@@ -12,9 +12,11 @@ class UIComponent:
 
 class SidebarConfig(UIComponent):
     def display(self) -> Tuple[bool, Optional[float]]:
+        logger.info("Displaying sidebar configuration.")
         st.sidebar.header("Configuration")
         is_simulation = st.sidebar.checkbox("Simulation Mode", value=config_manager.get_config('simulation_mode')['enabled'], key='is_simulation')
         if is_simulation:
+            logger.info("Simulation mode selected.")
             st.sidebar.write("Running in simulation mode. No real trades will be executed.")
             simulated_usdt_balance = st.sidebar.number_input(
                 "Simulated USDT Balance",
@@ -25,10 +27,12 @@ class SidebarConfig(UIComponent):
             )
             return is_simulation, simulated_usdt_balance
         else:
+            logger.info("Live trading mode selected.")
             st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
             st.sidebar.warning("Only proceed if you understand the risks and are using funds you can afford to lose.")
             proceed = st.sidebar.checkbox("I understand the risks and want to proceed", key="proceed_checkbox")
             if not proceed:
+                logger.info("User did not proceed with live trading.")
                 st.sidebar.error("Please check the box to proceed with live trading.")
                 return None, None
             return is_simulation, None
@@ -39,17 +43,15 @@ class StatusTable(UIComponent):
 
     def display(self, current_status: Dict[str, Any]) -> None:
         if not current_status:
+            logger.warning("No current status available.")
             st.warning("No current status available.")
             return
+        logger.info("Displaying status table.")
         status_df = self._create_status_dataframe(current_status)
         st.dataframe(status_df, use_container_width=True)
 
-    def _create_status_dataframe(self, current_status: Dict[str, Any]) -> pd.DataFrame:
-        symbol_data = self._create_symbol_status_data(current_status)
-        summary_data = self._create_summary_data(current_status)
-        return pd.concat([pd.DataFrame(symbol_data), pd.DataFrame(summary_data)], ignore_index=True)
-
     def _create_symbol_status_data(self, current_status: Dict[str, Any]) -> Dict[str, List[Any]]:
+        logger.info("Creating symbol status data.")
         symbols = list(current_status['prices'].keys())
         return {
             'Symbol': symbols,
@@ -63,7 +65,14 @@ class StatusTable(UIComponent):
             'Trading Balance': [self._format_trading_balance(current_status['wallet_summary'], symbol) for symbol in symbols],
         }
 
+    def _create_status_dataframe(self, current_status: Dict[str, Any]) -> pd.DataFrame:
+        logger.info("Creating status dataframe.")
+        symbol_data = self._create_symbol_status_data(current_status)
+        summary_data = self._create_summary_data(current_status)
+        return pd.concat([pd.DataFrame(symbol_data), pd.DataFrame(summary_data)], ignore_index=True)
+
     def _create_summary_data(self, current_status: Dict[str, Any]) -> Dict[str, List[Any]]:
+        logger.info("Creating summary data.")
         return {
             'Symbol': ['Total', 'Current Total USDT', 'Tradable USDT', 'Liquid USDT'],
             'Current Price': ['', f"{current_status['current_total_usdt']:.4f}", f"{current_status['tradable_usdt']:.4f}", f"{current_status['liquid_usdt']:.4f}"],
@@ -116,16 +125,19 @@ class StatusTable(UIComponent):
 
 class TradeMessages(UIComponent):
     def display(self) -> None:
+        logger.info("Displaying trade messages.")
         st.text("\n".join(st.session_state.trade_messages[-10:]))  # Display last 10 messages
 
 class ErrorMessage(UIComponent):
     def display(self, *args, **kwargs) -> None:
         if 'error_message' in st.session_state and st.session_state.error_message:
+            logger.error(f"Displaying error message: {st.session_state.error_message}")
             st.error(st.session_state.error_message)
             st.session_state.error_message = ""  # Clear the error message after displaying
 
 class TradingControls(UIComponent):
     def display(self) -> Tuple[bool, bool]:
+        logger.info("Displaying trading controls.")
         col1, col2 = st.sidebar.columns(2)
         start_button = col1.button("Start Trading")
         stop_button = col2.button("Stop Trading")
@@ -133,10 +145,12 @@ class TradingControls(UIComponent):
 
 class SymbolSelector(UIComponent):
     def display(self, available_symbols: List[str], default_symbols: List[str]) -> List[str]:
+        logger.info("Displaying symbol selector.")
         return st.sidebar.multiselect("Select Symbols to Trade", available_symbols, default=default_symbols, key='selected_symbols')
 
 class TradingParameters(UIComponent):
     def display(self) -> Tuple[float, float, int]:
+        logger.info("Displaying trading parameters.")
         usdt_liquid_percentage = st.sidebar.number_input(
             "Enter the percentage of your assets to keep liquid in USDT (0-100%)",
             min_value=0.0,
@@ -170,12 +184,14 @@ class TradingParameters(UIComponent):
 
 class ChartDisplay(UIComponent):
     def display(self, charts: Dict[str, Any]) -> None:
+        logger.info("Displaying charts.")
         for symbol, chart in charts['individual_price_charts'].items():
             st.plotly_chart(chart, use_container_width=True)
         st.plotly_chart(charts['total_profit'], use_container_width=True)
 
 class SimulationIndicator(UIComponent):
     def display(self, is_simulation: bool) -> None:
+        logger.info(f"Displaying simulation indicator: {is_simulation}")
         if is_simulation:
             st.sidebar.warning("Running in Simulation Mode")
         else:
@@ -186,6 +202,7 @@ class WalletBalance(UIComponent):
         self.bot = bot
 
     def display(self) -> None:
+        logger.info("Displaying wallet balance.")
         total_balance = self.bot.wallet.get_total_balance_in_usdt()
         liquid_usdt = self.bot.wallet.get_currency_balance('trading', 'USDT', 'liquid')
         trading_usdt = self.bot.wallet.get_currency_balance('trading', 'USDT', 'trading')
@@ -195,15 +212,19 @@ class WalletBalance(UIComponent):
 
 class LiveTradingVerification(UIComponent):
     def display(self) -> bool:
+        logger.info("Displaying live trading verification.")
         live_trading_key = st.sidebar.text_input("Enter live trading access key", type="password")
         if config_manager.verify_live_trading_access(live_trading_key):
+            logger.info("Live trading access key verified.")
             st.sidebar.success("Live trading access key verified.")
             return True
         else:
+            logger.info("Invalid live trading access key.")
             st.sidebar.error("Invalid live trading access key. Please try again.")
             return False
 
 def initialize_session_state() -> None:
+    logger.info("Initializing session state.")
     if 'trade_messages' not in st.session_state:
         st.session_state.trade_messages = []
     if 'error_message' not in st.session_state:
@@ -228,15 +249,18 @@ class UIManager:
 
     def display_component(self, component_name: str, *args, **kwargs):
         if component_name in self.components:
+            logger.info(f"Displaying component: {component_name}")
             return self.components[component_name].display(*args, **kwargs)
         else:
             logger.error(f"Component '{component_name}' not found")
             st.error(f"UI component '{component_name}' not found")
 
     def initialize(self):
+        logger.info("Initializing UIManager.")
         initialize_session_state()
 
     def update_bot(self, bot):
+        logger.info("Updating bot in UIManager.")
         self.bot = bot
         self.components['status_table'] = StatusTable(bot)
         self.components['wallet_balance'] = WalletBalance(bot)
