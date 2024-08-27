@@ -71,7 +71,7 @@ class Wallet:
         }
         self.accounts['simulation'].add_currency('USDT', 1000.0)  # Default simulated balance
 
-    def update_account_balance(self, account_type: str, currency: str, balance: float, balance_type: str = 'trading'):
+    def update_account_balance(self, account_type: str, currency: str, balance: float, balance_type: str = 'trading') -> None:
         if account_type in self.accounts:
             account = self.accounts[account_type]
             if balance_type == 'liquid':
