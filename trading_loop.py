@@ -22,8 +22,8 @@ class TradingLoop:
     def __init__(self, bot: TradingBot, chosen_symbols: List[str], profit_margin: float, num_orders: int):
         self.bot = bot
         self.chosen_symbols = chosen_symbols
-        self.profit_margin = profit_margin if profit_margin is not None else 0  # Use 0 as the default if profit_margin is None
-        self.num_orders = num_orders if num_orders is not None else 1  # Use 1 as the default if num_orders is None
+        self.profit_margin = profit_margin if profit_margin is not None else config_manager.get_config('profit_margin', 0)  # Use the default value from config if profit_margin is None
+        self.num_orders = num_orders if num_orders is not None else config_manager.get_config('num_orders', 1)  # Use the default value from config if num_orders is None
 
     @handle_trading_errors
     def run(self, stop_event: threading.Event) -> None:
