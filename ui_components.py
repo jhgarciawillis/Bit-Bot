@@ -33,11 +33,13 @@ class SidebarConfig(UIComponent):
             return is_simulation, None
 
 class StatusTable(UIComponent):
-    def __init__(self, bot, chosen_symbols: List[str]):
+    def __init__(self, bot):
         self.bot = bot
-        self.chosen_symbols = chosen_symbols
 
     def display(self, current_status: Dict[str, Any]) -> None:
+        if not current_status:
+            st.warning("No current status available.")
+            return
         status_df = self._create_status_dataframe(current_status)
         st.dataframe(status_df, use_container_width=True)
 
@@ -47,14 +49,15 @@ class StatusTable(UIComponent):
         return pd.concat([pd.DataFrame(symbol_data), pd.DataFrame(summary_data)], ignore_index=True)
 
     def _create_symbol_status_data(self, current_status: Dict[str, Any]) -> Dict[str, List[Any]]:
+        symbols = list(current_status['prices'].keys())
         return {
-            'Symbol': self.chosen_symbols,
-            'Current Price': [self._format_price(current_status['prices'].get(symbol)) for symbol in self.chosen_symbols],
-            'Buy Price': [self._format_buy_price(current_status['active_trades'], symbol) for symbol in self.chosen_symbols],
-            'Target Sell Price': [self._format_target_sell_price(current_status['active_trades'], symbol) for symbol in self.chosen_symbols],
-            'Current P/L': [self._format_current_pl(current_status['prices'], current_status['active_trades'], symbol) for symbol in self.chosen_symbols],
-            'Active Trade': [self._format_active_trade(current_status['active_trades'], symbol) for symbol in self.chosen_symbols],
-            'Realized Profit': [self._format_realized_profit(current_status['profits'], symbol) for symbol in self.chosen_symbols],
+            'Symbol': symbols,
+            'Current Price': [self._format_price(current_status['prices'].get(symbol)) for symbol in symbols],
+            'Buy Price': [self._format_buy_price(current_status['active_trades'], symbol) for symbol in symbols],
+            'Target Sell Price': [self._format_target_sell_price(current_status['active_trades'], symbol) for symbol in symbols],
+            'Current P/L': [self._format_current_pl(current_status['prices'], current_status['active_trades'], symbol) for symbol in symbols],
+            'Active Trade': [self._format_active_trade(current_status['active_trades'], symbol) for symbol in symbols],
+            'Realized Profit': [self._format_realized_profit(current_status['profits'], symbol) for symbol in symbols],
         }
 
     def _create_summary_data(self, current_status: Dict[str, Any]) -> Dict[str, List[Any]]:
@@ -79,7 +82,7 @@ class StatusTable(UIComponent):
 
     def _format_target_sell_price(self, active_trades: Dict[str, Dict[str, Any]], symbol: str) -> str:
         buy_order = next((trade for trade in active_trades.values() if trade['symbol'] == symbol), None)
-        return f"{buy_order['buy_price'] * (1 + self.bot.profits[symbol]):.4f} USDT" if buy_order else 'N/A'
+        return f"{buy_order['buy_price'] * (1 + self.bot.profits.get(symbol, 0)):.4f} USDT" if buy_order else 'N/A'
 
     @staticmethod
     def _format_current_pl(prices: Dict[str, float], active_trades: Dict[str, Dict[str, Any]], symbol: str) -> str:
@@ -115,12 +118,8 @@ class TradingControls(UIComponent):
         return start_button, stop_button
 
 class SymbolSelector(UIComponent):
-    def __init__(self, available_symbols: List[str], default_symbols: List[str]):
-        self.available_symbols = available_symbols
-        self.default_symbols = default_symbols
-
-    def display(self) -> List[str]:
-        return st.sidebar.multiselect("Select Symbols to Trade", self.available_symbols, default=self.default_symbols)
+    def display(self, available_symbols: List[str], default_symbols: List[str]) -> List[str]:
+        return st.sidebar.multiselect("Select Symbols to Trade", available_symbols, default=default_symbols)
 
 class TradingParameters(UIComponent):
     def display(self) -> Tuple[float, float, int]:
@@ -159,11 +158,8 @@ class ChartDisplay(UIComponent):
         st.plotly_chart(charts['total_profit'], use_container_width=True)
 
 class SimulationIndicator(UIComponent):
-    def __init__(self, is_simulation: bool):
-        self.is_simulation = is_simulation
-
-    def display(self) -> None:
-        if self.is_simulation:
+    def display(self, is_simulation: bool) -> None:
+        if is_simulation:
             st.sidebar.warning("Running in Simulation Mode")
         else:
             st.sidebar.success("Running in Live Trading Mode")
@@ -197,14 +193,14 @@ class UIManager:
         self.bot = bot
         self.components = {
             'sidebar_config': SidebarConfig(),
-            'status_table': StatusTable(bot, config_manager.get_config('trading_symbols')),
+            'status_table': StatusTable(bot),
             'trade_messages': TradeMessages(),
             'error_message': ErrorMessage(),
             'trading_controls': TradingControls(),
-            'symbol_selector': SymbolSelector(config_manager.get_available_trading_symbols(), config_manager.get_config('trading_symbols')),
+            'symbol_selector': SymbolSelector(),
             'trading_parameters': TradingParameters(),
             'chart_display': ChartDisplay(),
-            'simulation_indicator': SimulationIndicator(config_manager.get_config('simulation_mode')['enabled']),
+            'simulation_indicator': SimulationIndicator(),
             'wallet_balance': WalletBalance(bot),
             'live_trading_verification': LiveTradingVerification(),
         }
@@ -218,3 +214,8 @@ class UIManager:
 
     def initialize(self):
         initialize_session_state()
+
+    def update_bot(self, bot):
+        self.bot = bot
+        self.components['status_table'] = StatusTable(bot)
+        self.components['wallet_balance'] = WalletBalance(bot)
