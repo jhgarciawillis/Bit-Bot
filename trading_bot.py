@@ -150,7 +150,7 @@ class TradingBot:
 
     def update_trading_balance_with_profit(self, symbol: str, profit: float) -> None:
         self.wallet.update_account_balance('trading', 'USDT', self.get_tradable_balance('USDT') + profit, 'trading')
-        self.profits[symbol] += profit
+        self.profits[symbol] = self.profits.get(symbol, 0) + profit
         self.total_profit += profit
         self.avg_profit_per_trade = self.total_profit / self.total_trades if self.total_trades > 0 else 0
 
