@@ -16,7 +16,7 @@ class Trade:
 class Currency:
     def __init__(self, symbol: str, balance: float = 0):
         self.symbol: str = symbol
-        self.balance: float = balance
+        self.balance: Dict[str, float] = {'liquid': 0, 'trading': 0}
         self.price_history: List[Tuple[datetime, float]] = []
         self.buy_history: List[Trade] = []
         self.sell_history: List[Trade] = []
@@ -33,33 +33,33 @@ class Currency:
         
         if trade_type == 'buy':
             self.buy_history.append(trade)
-            self.balance += amount
+            self.balance['trading'] += amount
         elif trade_type == 'sell':
             self.sell_history.append(trade)
-            self.balance -= amount
+            self.balance['trading'] -= amount
         
         logger.info(f"Recorded {trade_type}: {self.symbol} - Amount: {amount}, Price: {price}, Fee: {fee}")
 
 class Account:
-    def __init__(self, account_type: str, initial_balance: float = 0):
+    def __init__(self, account_type: str):
         self.account_type: str = account_type
         self.currencies: Dict[str, Currency] = {}
-        self.add_currency('USDT', initial_balance)
 
-    def add_currency(self, symbol: str, balance: float = 0) -> None:
+    def add_currency(self, symbol: str) -> None:
         if symbol not in self.currencies:
-            self.currencies[symbol] = Currency(symbol, balance)
+            self.currencies[symbol] = Currency(symbol)
             logger.info(f"Added currency {symbol} to account {self.account_type}")
 
-    def get_currency_balance(self, symbol: str) -> float:
-        return self.currencies.get(symbol, Currency(symbol)).balance
+    def get_currency_balance(self, symbol: str, balance_type: str) -> float:
+        if symbol in self.currencies:
+            return self.currencies[symbol].balance[balance_type]
+        return 0.0
 
-    def update_currency_balance(self, symbol: str, new_balance: float) -> None:
+    def update_currency_balance(self, symbol: str, new_balance: float, balance_type: str) -> None:
         if symbol not in self.currencies:
-            self.add_currency(symbol, new_balance)
-        else:
-            self.currencies[symbol].balance = new_balance
-        logger.info(f"Updated balance for {symbol} in account {self.account_type}: {new_balance}")
+            self.add_currency(symbol)
+        self.currencies[symbol].balance[balance_type] = new_balance
+        logger.info(f"Updated {balance_type} balance for {symbol} in account {self.account_type}: {new_balance}")
 
     def update_currency_price(self, symbol: str, price: float) -> None:
         if symbol in self.currencies:
@@ -67,29 +67,45 @@ class Account:
             logger.info(f"Updated price for {symbol} in account {self.account_type}: {price}")
 
 class Wallet:
-    def __init__(self):
+    def __init__(self, is_simulation: bool, liquid_ratio: float):
+        self.is_simulation = is_simulation
+        self.liquid_ratio = liquid_ratio
         self.accounts: Dict[str, Account] = {
-            'trading': Account('trading', config_manager.get_config('simulation_mode')['initial_balance']),
-            'simulation': Account('simulation', config_manager.get_config('simulation_mode')['initial_balance'])
+            'trading': Account('trading'),
+            'simulation': Account('simulation')
         }
-        self.is_simulation = config_manager.get_config('simulation_mode')['enabled']
         self.profits: Dict[str, float] = {}
 
-    def update_account_balance(self, account_type: str, currency: str, balance: float, balance_type: str = 'trading') -> None:
+    def initialize_balance(self, total_balance: float) -> None:
+        liquid_balance = total_balance * self.liquid_ratio
+        tradable_balance = total_balance - liquid_balance
+        self.update_account_balance('trading', 'USDT', liquid_balance, 'liquid')
+        self.update_account_balance('trading', 'USDT', tradable_balance, 'trading')
+
+    def update_account_balance(self, account_type: str, currency: str, balance: float, balance_type: str) -> None:
         if account_type in self.accounts:
             account = self.accounts[account_type]
-            account.update_currency_balance(currency, balance)
+            account.update_currency_balance(currency, balance, balance_type)
             logger.info(f"Updated {account_type} account {balance_type} balance for {currency}: {balance}")
         else:
             logger.warning(f"Invalid account type: {account_type}")
 
-    def get_currency_balance(self, account_type: str, currency: str) -> float:
+    def get_currency_balance(self, account_type: str, currency: str, balance_type: str) -> float:
         if account_type in self.accounts:
             account = self.accounts[account_type]
-            return account.get_currency_balance(currency)
+            return account.get_currency_balance(currency, balance_type)
         else:
-            logger.warning(f"No balance found for {currency} in {account_type} account")
+            logger.warning(f"No {balance_type} balance found for {currency} in {account_type} account")
             return 0.0
+
+    def get_tradable_balance(self, currency: str = 'USDT') -> float:
+        return self.get_currency_balance('trading', currency, 'trading')
+
+    def get_liquid_balance(self, currency: str = 'USDT') -> float:
+        return self.get_currency_balance('trading', currency, 'liquid')
+
+    def get_total_balance(self, currency: str = 'USDT') -> float:
+        return self.get_tradable_balance(currency) + self.get_liquid_balance(currency)
 
     def get_total_balance_in_usdt(self, account_type: str = 'trading') -> float:
         if self.is_simulation:
@@ -103,9 +119,9 @@ class Wallet:
             account = self.accounts[account_type]
             for currency in account.currencies.values():
                 if currency.symbol == 'USDT':
-                    total_usdt += currency.balance
+                    total_usdt += currency.balance['liquid'] + currency.balance['trading']
                 elif currency.current_price is not None:
-                    total_usdt += currency.balance * currency.current_price
+                    total_usdt += currency.balance['trading'] * currency.current_price
         logger.info(f"Total simulated {account_type} account balance: {total_usdt:.2f} USDT")
         return total_usdt
 
@@ -124,7 +140,8 @@ class Wallet:
         return {
             account_type: {
                 currency.symbol: {
-                    'balance': currency.balance,
+                    'liquid': currency.balance['liquid'],
+                    'trading': currency.balance['trading'],
                     'price': currency.current_price or 0
                 } for currency in account.currencies.values()
             } for account_type, account in self.accounts.items()
@@ -133,14 +150,13 @@ class Wallet:
     def update_wallet_state(self, account_type: str, currency: str, amount: float, price: float, fee: float, side: str) -> None:
         account = self.accounts.get(account_type)
         if account:
-            if currency in account.currencies:
-                account.currencies[currency].record_trade(amount, price, fee, side)
-                if side == 'buy':
-                    self.update_account_balance(account_type, 'USDT', account.get_currency_balance('USDT') - (amount * price + fee))
-                elif side == 'sell':
-                    self.update_account_balance(account_type, 'USDT', account.get_currency_balance('USDT') + (amount * price - fee))
-            else:
-                logger.warning(f"Currency {currency} not found in {account_type} account")
+            if currency not in account.currencies:
+                account.add_currency(currency)
+            account.currencies[currency].record_trade(amount, price, fee, side)
+            if side == 'buy':
+                self.update_account_balance(account_type, 'USDT', self.get_tradable_balance('USDT') - (amount * price + fee), 'trading')
+            elif side == 'sell':
+                self.update_account_balance(account_type, 'USDT', self.get_tradable_balance('USDT') + (amount * price - fee), 'trading')
         else:
             logger.warning(f"Invalid account type: {account_type}")
 
@@ -159,7 +175,7 @@ class Wallet:
         logger.warning(f"No price found for {currency} in {account_type} account")
         return 0.0
 
-    def sync_with_exchange(self, account_type: str, liquid_ratio: float) -> None:
+    def sync_with_exchange(self, account_type: str) -> None:
         if self.is_simulation:
             logger.warning("Syncing wallet with exchange is not applicable in simulation mode")
             return
@@ -171,7 +187,10 @@ class Wallet:
                 if account['type'] == 'trade':
                     symbol = account['currency']
                     total_balance = float(account['balance'])
-                    self.update_account_balance(account_type, symbol, total_balance)
+                    trading_balance = total_balance * (1 - self.liquid_ratio)
+                    liquid_balance = total_balance * self.liquid_ratio
+                    self.update_account_balance(account_type, symbol, liquid_balance, 'liquid')
+                    self.update_account_balance(account_type, symbol, trading_balance, 'trading')
             logger.info(f"Wallet synchronized with exchange for account type: {account_type}")
         except Exception as e:
             logger.error(f"Unexpected error synchronizing wallet: {e}")
@@ -186,8 +205,5 @@ class Wallet:
         return self.profits
 
 def create_wallet(is_simulation: bool, liquid_ratio: float = 0.5) -> Wallet:
-    wallet = Wallet()
-    wallet.is_simulation = is_simulation
-    if not is_simulation:
-        wallet.sync_with_exchange('trading', liquid_ratio)
+    wallet = Wallet(is_simulation, liquid_ratio)
     return wallet
