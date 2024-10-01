@@ -31,6 +31,10 @@ DEFAULT_CONFIG = {
     'error_config': {
         'max_retries': 3,
         'retry_delay': 5,  # in seconds
+    },
+    'fees': {
+        'maker': 0.001,  # 0.1%
+        'taker': 0.001,  # 0.1%
     }
 }
 
@@ -138,13 +142,16 @@ class ConfigManager:
         logger.info(f"Placing {side} order for {symbol} at price: {price}, size: {size}, simulation mode: {is_simulation}")
         try:
             if is_simulation:
+                fee = size * price * self.config['fees']['taker']
                 order = {
                     'orderId': f'sim_{side}_{symbol}_{time.time()}',
                     'symbol': symbol,
                     'side': side,
                     'price': price,
                     'size': size,
-                    'fee': size * price * 0.001  # Simulated 0.1% fee
+                    'fee': fee,
+                    'dealSize': size,
+                    'dealFunds': size * price,
                 }
             else:
                 trade_client = kucoin_client_manager.get_client(Trade)
@@ -154,6 +161,13 @@ class ConfigManager:
                     price=str(price),
                     size=str(size)
                 )
+                # Fetch order details to get the actual filled amount and fees
+                order_details = trade_client.get_order_details(order['orderId'])
+                order.update({
+                    'dealSize': float(order_details['dealSize']),
+                    'dealFunds': float(order_details['dealFunds']),
+                    'fee': float(order_details['fee']),
+                })
             logger.info(f"{'Simulated' if is_simulation else 'Placed'} {side} order for {symbol}: {order}")
             return order
         except Exception as e:
@@ -194,7 +208,7 @@ config_manager = ConfigManager()
 
 if __name__ == "__main__":
     logger.info("Running config.py as the main script.")
-    logger.info("Loaded configuration: {config_manager.config}")
+    logger.info(f"Loaded configuration: {config_manager.config}")
     symbols = config_manager.get_available_trading_symbols()
     logger.info(f"Available trading symbols: {symbols}")
     prices = config_manager.fetch_real_time_prices(config_manager.config['trading_symbols'])
