@@ -78,8 +78,8 @@ class BalanceChart(Chart):
     def __init__(self):
         super().__init__('Balance Over Time', 'Timestamp', 'Balance (USDT)')
 
-    def add_balance_data(self, timestamps: List[datetime], liquid_balances: List[float], trading_balances: List[float]):
-        self.add_line_trace(timestamps, liquid_balances, 'Liquid Balance')
+    def add_balance_data(self, timestamps: List[datetime], total_balances: List[float], trading_balances: List[float]):
+        self.add_line_trace(timestamps, total_balances, 'Total Balance')
         self.add_line_trace(timestamps, trading_balances, 'Trading Balance')
 
 class ChartCreator:
@@ -113,14 +113,14 @@ class ChartCreator:
         active_trade = self.get_active_trade(symbol)
         if active_trade:
             buy_price = active_trade['buy_price']
-            target_sell_price = buy_price * (1 + self.bot.profits.get(symbol, 0) if self.bot.profits.get(symbol, 0) is not None else 0)
+            target_sell_price = buy_price * (1 + self.bot.profit_margin)
             chart.add_trade_lines(buy_price, target_sell_price)
         
         return chart.fig
 
     def create_total_profit_chart(self) -> go.Figure:
         timestamps = [status['timestamp'] for status in self.bot.status_history]
-        total_profits = [status['total_profit'] for status in self.bot.status_history]
+        total_profits = [sum(status['profits'].values()) for status in self.bot.status_history]
         
         chart = ProfitChart()
         chart.add_profit_data(timestamps, total_profits)
@@ -129,11 +129,11 @@ class ChartCreator:
 
     def create_balance_chart(self) -> go.Figure:
         timestamps = [status['timestamp'] for status in self.bot.status_history]
-        liquid_balances = [status['liquid_usdt'] for status in self.bot.status_history]
+        total_balances = [status['current_total_usdt'] for status in self.bot.status_history]
         trading_balances = [status['tradable_usdt'] for status in self.bot.status_history]
         
         chart = BalanceChart()
-        chart.add_balance_data(timestamps, liquid_balances, trading_balances)
+        chart.add_balance_data(timestamps, total_balances, trading_balances)
         
         return chart.fig
 
@@ -155,7 +155,7 @@ class ChartCreator:
         sell_timestamps = []
         for entry in price_data:
             active_trade = self.get_active_trade(symbol)
-            if active_trade and entry['price'] >= active_trade['buy_price'] * (1 + self.bot.profits.get(symbol, 0) if self.bot.profits.get(symbol, 0) is not None else 0):
+            if active_trade and entry['price'] >= active_trade['buy_price'] * (1 + self.bot.profit_margin):
                 sell_signals.append(entry['price'])
                 sell_timestamps.append(entry['timestamp'])
         return sell_timestamps, sell_signals
