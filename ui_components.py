@@ -57,12 +57,9 @@ class StatusTable(UIComponent):
             'Symbol': symbols,
             'Current Price': [self._format_price(current_status['prices'].get(symbol)) for symbol in symbols],
             'Buy Price': [self._format_buy_price(current_status['active_trades'], symbol) for symbol in symbols],
-            'Target Sell Price': [self._format_target_sell_price(current_status['active_trades'], symbol, self.bot.profits.get(symbol, 0) if self.bot.profits.get(symbol, 0) is not None else 0) for symbol in symbols],
+            'Target Sell Price': [self._format_target_sell_price(current_status['active_trades'], symbol, self.bot.profit_margin) for symbol in symbols],
             'Current P/L': [self._format_current_pl(current_status['prices'], current_status['active_trades'], symbol) for symbol in symbols],
-            'Active Trade': [self._format_active_trade(current_status['active_trades'], symbol) for symbol in symbols],
             'Realized Profit': [self._format_realized_profit(current_status['profits'], symbol) for symbol in symbols],
-            'Liquid Balance': [self._format_liquid_balance(current_status['wallet_summary'], symbol) for symbol in symbols],
-            'Trading Balance': [self._format_trading_balance(current_status['wallet_summary'], symbol) for symbol in symbols],
         }
 
     def _create_status_dataframe(self, current_status: Dict[str, Any]) -> pd.DataFrame:
@@ -73,16 +70,21 @@ class StatusTable(UIComponent):
 
     def _create_summary_data(self, current_status: Dict[str, Any]) -> Dict[str, List[Any]]:
         logger.info("Creating summary data.")
+        total_current_value = sum(
+            current_status['prices'].get(symbol, 0) * self.bot.wallet.get_currency_balance('trading', symbol)
+            for symbol in current_status['prices']
+        )
+        total_buy_value = sum(
+            trade['buy_price'] * trade['amount']
+            for trade in current_status['active_trades'].values()
+        )
         return {
-            'Symbol': ['Total', 'Current Total USDT', 'Tradable USDT', 'Liquid USDT'],
-            'Current Price': ['', f"{current_status['current_total_usdt']:.4f}", f"{current_status['tradable_usdt']:.4f}", f"{current_status['liquid_usdt']:.4f}"],
-            'Buy Price': ['', '', '', ''],
-            'Target Sell Price': ['', '', '', ''],
-            'Current P/L': ['', '', '', ''],
-            'Active Trade': ['', '', '', ''],
-            'Realized Profit': [f"{self.bot.total_profit:.4f}", '', '', ''],
-            'Liquid Balance': ['', '', '', f"{current_status['liquid_usdt']:.4f}"],
-            'Trading Balance': ['', f"{current_status['current_total_usdt']:.4f}", f"{current_status['tradable_usdt']:.4f}", ''],
+            'Symbol': ['Total'],
+            'Current Price': [f"{total_current_value:.4f} USDT"],
+            'Buy Price': [f"{total_buy_value:.4f} USDT"],
+            'Target Sell Price': [''],
+            'Current P/L': [f"{(total_current_value - total_buy_value) / total_buy_value * 100:.2f}%" if total_buy_value > 0 else 'N/A'],
+            'Realized Profit': [f"{sum(current_status['profits'].values()):.4f} USDT"],
         }
 
     @staticmethod
@@ -97,31 +99,23 @@ class StatusTable(UIComponent):
     @staticmethod
     def _format_target_sell_price(active_trades: Dict[str, Dict[str, Any]], symbol: str, profit_margin: float) -> str:
         buy_order = next((trade for trade in active_trades.values() if trade['symbol'] == symbol), None)
-        return f"{buy_order['buy_price'] * (1 + profit_margin):.4f} USDT" if buy_order and profit_margin is not None else 'N/A'
+        if buy_order:
+            target_sell_price = buy_order['buy_price'] * (1 + profit_margin)
+            return f"{target_sell_price:.4f} USDT"
+        return 'N/A'
 
     @staticmethod
     def _format_current_pl(prices: Dict[str, float], active_trades: Dict[str, Dict[str, Any]], symbol: str) -> str:
         current_price = prices.get(symbol)
         buy_order = next((trade for trade in active_trades.values() if trade['symbol'] == symbol), None)
         if current_price is not None and buy_order and buy_order['buy_price'] != 0:
-            return f"{(current_price - buy_order['buy_price']) / buy_order['buy_price'] * 100:.2f}%"
+            pl_percentage = (current_price - buy_order['buy_price']) / buy_order['buy_price'] * 100
+            return f"{pl_percentage:.2f}%"
         return 'N/A'
 
     @staticmethod
-    def _format_active_trade(active_trades: Dict[str, Dict[str, Any]], symbol: str) -> str:
-        return 'Yes' if any(trade['symbol'] == symbol for trade in active_trades.values()) else 'No'
-
-    @staticmethod
     def _format_realized_profit(profits: Dict[str, float], symbol: str) -> str:
-        return f"{profits.get(symbol, 0):.4f}"
-
-    @staticmethod
-    def _format_liquid_balance(wallet_summary: Dict[str, Dict[str, Dict[str, float]]], symbol: str) -> str:
-        return f"{wallet_summary['trading'].get(symbol, {}).get('liquid', 0):.4f}"
-
-    @staticmethod
-    def _format_trading_balance(wallet_summary: Dict[str, Dict[str, Dict[str, float]]], symbol: str) -> str:
-        return f"{wallet_summary['trading'].get(symbol, {}).get('trading', 0):.4f}"
+        return f"{profits.get(symbol, 0):.4f} USDT"
 
 class TradeMessages(UIComponent):
     def display(self) -> None:
@@ -204,10 +198,8 @@ class WalletBalance(UIComponent):
     def display(self) -> None:
         logger.info("Displaying wallet balance.")
         total_balance = self.bot.wallet.get_total_balance_in_usdt()
-        liquid_usdt = self.bot.wallet.get_currency_balance('trading', 'USDT', 'liquid')
-        trading_usdt = self.bot.wallet.get_currency_balance('trading', 'USDT', 'trading')
+        trading_usdt = self.bot.get_tradable_balance('USDT')
         st.sidebar.info(f"Total Balance: {total_balance:.2f} USDT")
-        st.sidebar.info(f"Liquid USDT: {liquid_usdt:.2f}")
         st.sidebar.info(f"Trading USDT: {trading_usdt:.2f}")
 
 class LiveTradingVerification(UIComponent):
