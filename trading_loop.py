@@ -22,8 +22,8 @@ class TradingLoop:
     def __init__(self, bot: TradingBot, chosen_symbols: List[str], profit_margin: float, num_orders: int):
         self.bot = bot
         self.chosen_symbols = chosen_symbols
-        self.profit_margin = profit_margin if profit_margin is not None else config_manager.get_config('profit_margin', 0)  # Use the default value from config if profit_margin is None
-        self.num_orders = num_orders if num_orders is not None else config_manager.get_config('num_orders', 1)  # Use the default value from config if num_orders is None
+        self.profit_margin = profit_margin if profit_margin is not None else config_manager.get_config('profit_margin', 0)
+        self.num_orders = num_orders if num_orders is not None else config_manager.get_config('num_orders', 1)
 
     @handle_trading_errors
     def run(self, stop_event: threading.Event) -> None:
@@ -68,7 +68,7 @@ class TradingLoop:
                 order_amount = min(allocated_value, usdt_balance)
                 order = self.bot.place_buy_order(symbol, order_amount, should_buy)
                 if order:
-                    logger.info(f"Placed buy order for {symbol}: {order_amount:.4f} USDT at {should_buy:.4f}")
+                    logger.info(f"Placed buy order for {symbol}: {order['dealSize']:.8f} {symbol} at {should_buy:.4f} USDT")
 
     @handle_trading_errors
     def check_sell_condition(self, symbol: str, current_price: float) -> None:
@@ -79,9 +79,9 @@ class TradingLoop:
                 sell_amount = active_trade['amount']
                 sell_order = self.bot.place_sell_order(symbol, sell_amount, current_price)
                 if sell_order:
-                    profit = (current_price - active_trade['buy_price']) * sell_amount - active_trade['fee'] - float(sell_order['fee'])
-                    self.bot.update_trading_balance_with_profit(symbol, profit)
-                    logger.info(f"Sold {symbol}: {sell_amount:.8f} at {current_price:.4f}, Profit: {profit:.4f} USDT")
+                    profit = self.bot.calculate_profit(active_trade, sell_order)
+                    self.bot.update_profit(symbol, profit)
+                    logger.info(f"Sold {symbol}: {sell_order['dealSize']:.8f} at {current_price:.4f}, Profit: {profit:.4f} USDT")
                     del self.bot.active_trades[active_trade['orderId']]
 
     @handle_trading_errors
