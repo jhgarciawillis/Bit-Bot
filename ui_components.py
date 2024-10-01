@@ -70,10 +70,7 @@ class StatusTable(UIComponent):
 
     def _create_summary_data(self, current_status: Dict[str, Any]) -> Dict[str, List[Any]]:
         logger.info("Creating summary data.")
-        total_current_value = sum(
-            current_status['prices'].get(symbol, 0) * self.bot.wallet.get_currency_balance('trading', symbol)
-            for symbol in current_status['prices']
-        )
+        total_current_value = current_status['current_total_usdt']
         total_buy_value = sum(
             trade['buy_price'] * trade['amount']
             for trade in current_status['active_trades'].values()
@@ -84,7 +81,7 @@ class StatusTable(UIComponent):
             'Buy Price': [f"{total_buy_value:.4f} USDT"],
             'Target Sell Price': [''],
             'Current P/L': [f"{(total_current_value - total_buy_value) / total_buy_value * 100:.2f}%" if total_buy_value > 0 else 'N/A'],
-            'Realized Profit': [f"{sum(current_status['profits'].values()):.4f} USDT"],
+            'Realized Profit': [f"{current_status['total_profit']:.4f} USDT"],
         }
 
     @staticmethod
@@ -197,9 +194,11 @@ class WalletBalance(UIComponent):
 
     def display(self) -> None:
         logger.info("Displaying wallet balance.")
-        total_balance = self.bot.wallet.get_total_balance_in_usdt()
-        trading_usdt = self.bot.get_tradable_balance('USDT')
+        total_balance = self.bot.wallet.get_total_balance('USDT')
+        liquid_usdt = self.bot.wallet.get_liquid_balance('USDT')
+        trading_usdt = self.bot.wallet.get_tradable_balance('USDT')
         st.sidebar.info(f"Total Balance: {total_balance:.2f} USDT")
+        st.sidebar.info(f"Liquid USDT: {liquid_usdt:.2f}")
         st.sidebar.info(f"Trading USDT: {trading_usdt:.2f}")
 
 class LiveTradingVerification(UIComponent):
