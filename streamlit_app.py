@@ -13,18 +13,19 @@ from wallet import create_wallet
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def initialize_bot(is_simulation: bool, liquid_ratio: float) -> TradingBot:
+def initialize_bot(is_simulation: bool, liquid_ratio: float, initial_balance: float) -> TradingBot:
     logger.info("Initializing bot...")
     bot = st.session_state.get('bot')
     if bot is None:
         logger.info("Creating a new bot instance.")
-        bot = create_trading_bot(config_manager.get_config('bot_config')['update_interval'])
+        bot = create_trading_bot(config_manager.get_config('bot_config')['update_interval'], liquid_ratio)
         st.session_state['bot'] = bot
     else:
         logger.info("Using existing bot instance.")
     
     bot.is_simulation = is_simulation
     bot.wallet = create_wallet(is_simulation, liquid_ratio)
+    bot.wallet.initialize_balance(initial_balance)
     
     bot.initialize()
     
@@ -74,11 +75,20 @@ def main():
                 if not ui_manager.display_component('live_trading_verification'):
                     return
             
+            logger.info("Displaying trading parameters...")
+            usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade = ui_manager.display_component('trading_parameters')
+            logger.info(f"Received usdt_liquid_percentage: {usdt_liquid_percentage}, profit_margin_percentage: {profit_margin_percentage}, num_orders_per_trade: {num_orders_per_trade}")
+
+            # Check if the returned values are valid
+            if profit_margin_percentage is None or num_orders_per_trade is None or usdt_liquid_percentage is None:
+                logger.error("Invalid trading parameters. Please check your configuration.")
+                st.error("Invalid trading parameters. Please check your configuration.")
+                return
+
+            initial_balance = simulated_balance if is_simulation else config_manager.get_config('simulation_mode')['initial_balance']
+            
             logger.info("Initializing bot...")
-            liquid_ratio = config_manager.get_config('usdt_liquid_percentage')
-            bot = initialize_bot(is_simulation, liquid_ratio)
-            if is_simulation:
-                bot.wallet.update_account_balance('trading', 'USDT', simulated_balance)
+            bot = initialize_bot(is_simulation, usdt_liquid_percentage, initial_balance)
             ui_manager.update_bot(bot)  # Update the bot in UIManager
 
             logger.info("Displaying wallet balance...")
@@ -100,16 +110,6 @@ def main():
             if not user_selected_symbols:
                 logger.warning("No symbols selected for trading.")
                 st.warning("Please select at least one symbol to trade.")
-                return
-
-            logger.info("Displaying trading parameters...")
-            usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade = ui_manager.display_component('trading_parameters')
-            logger.info(f"Received usdt_liquid_percentage: {usdt_liquid_percentage}, profit_margin_percentage: {profit_margin_percentage}, num_orders_per_trade: {num_orders_per_trade}")
-
-            # Check if the returned values are valid
-            if profit_margin_percentage is None or num_orders_per_trade is None or usdt_liquid_percentage is None:
-                logger.error("Invalid trading parameters. Please check your configuration.")
-                st.error("Invalid trading parameters. Please check your configuration.")
                 return
 
             logger.info("Informing users about total fees and suggested profit margin.")
@@ -166,4 +166,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
