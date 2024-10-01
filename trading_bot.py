@@ -18,9 +18,10 @@ def handle_trading_errors(func):
     return wrapper
 
 class TradingBot:
-    def __init__(self, update_interval: int):
+    def __init__(self, update_interval: int, liquid_ratio: float):
         self.wallet = None
         self.update_interval = update_interval
+        self.liquid_ratio = liquid_ratio
         self.symbol_allocations: Dict[str, float] = {}
         self.price_history: Dict[str, deque] = {}
         self.active_trades: Dict[str, Dict] = {}
@@ -33,7 +34,10 @@ class TradingBot:
     def initialize(self) -> None:
         self.is_simulation = config_manager.get_config('simulation_mode')['enabled']
         self.PRICE_HISTORY_LENGTH = config_manager.get_config('chart_config')['history_length']
-        self.wallet = create_wallet(self.is_simulation)
+        self.wallet = create_wallet(self.is_simulation, self.liquid_ratio)
+        initial_balance = config_manager.get_config('simulation_mode')['initial_balance']
+        self.wallet.initialize_balance(initial_balance)
+        
         if not self.is_simulation:
             self.update_wallet_balances()
             self.trade_client = config_manager.kucoin_client_manager.get_client(Trade)
@@ -49,7 +53,7 @@ class TradingBot:
             logger.error(f"Error updating wallet balances: {e}")
 
     def get_tradable_balance(self, currency: str = 'USDT') -> float:
-        return self.wallet.get_currency_balance('trading', currency)
+        return self.wallet.get_tradable_balance(currency)
 
     def get_user_allocations(self, user_selected_symbols: List[str]) -> Dict[str, float]:
         tradable_usdt_amount = self.get_tradable_balance('USDT')
@@ -109,8 +113,9 @@ class TradingBot:
         return None
 
     def get_current_status(self, prices: Dict[str, float]) -> Dict:
-        current_total_usdt = self.wallet.get_total_balance_in_usdt('trading')
+        current_total_usdt = self.wallet.get_total_balance('USDT')
         tradable_usdt = self.get_tradable_balance('USDT')
+        liquid_usdt = self.wallet.get_liquid_balance('USDT')
         
         status = {
             'timestamp': datetime.now(),
@@ -120,6 +125,7 @@ class TradingBot:
             'total_profit': sum(self.wallet.get_profits().values()),
             'current_total_usdt': current_total_usdt,
             'tradable_usdt': tradable_usdt,
+            'liquid_usdt': liquid_usdt,
             'wallet_summary': self.wallet.get_account_summary(),
             'total_trades': self.total_trades,
             'avg_profit_per_trade': sum(self.wallet.get_profits().values()) / self.total_trades if self.total_trades > 0 else 0,
@@ -153,7 +159,7 @@ class TradingBot:
         self.wallet.update_profits(symbol, profit)
         self.total_trades += 1
 
-def create_trading_bot(update_interval: int) -> TradingBot:
-    bot = TradingBot(update_interval)
+def create_trading_bot(update_interval: int, liquid_ratio: float) -> TradingBot:
+    bot = TradingBot(update_interval, liquid_ratio)
     bot.initialize()
     return bot
