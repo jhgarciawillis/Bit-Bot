@@ -53,112 +53,149 @@ def main():
         ui_manager.initialize()
 
         if 'is_trading' not in st.session_state:
-            logger.info("Initializing 'is_trading' in session state.")
             st.session_state.is_trading = False
         if 'stop_event' not in st.session_state:
-            logger.info("Initializing 'stop_event' in session state.")
             st.session_state.stop_event = None
         if 'trading_task' not in st.session_state:
-            logger.info("Initializing 'trading_task' in session state.")
             st.session_state.trading_task = None
         if 'user_inputs' not in st.session_state:
-            logger.info("Initializing 'user_inputs' in session state.")
             st.session_state.user_inputs = {}
 
-        logger.info("Configuring sidebar...")
-        is_simulation, simulated_balance = ui_manager.display_component('sidebar_config')
+        # Sidebar
+        st.sidebar.header("Configuration")
 
-        if is_simulation is not None:
-            logger.info(f"Simulation mode: {is_simulation}")
-            if not is_simulation:
-                logger.info("Live trading mode, verifying access key...")
-                if not ui_manager.display_component('live_trading_verification'):
-                    return
-            
-            logger.info("Displaying trading parameters...")
-            usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade = ui_manager.display_component('trading_parameters')
-            logger.info(f"Received usdt_liquid_percentage: {usdt_liquid_percentage}, profit_margin_percentage: {profit_margin_percentage}, num_orders_per_trade: {num_orders_per_trade}")
-
-            # Check if the returned values are valid
-            if profit_margin_percentage is None or num_orders_per_trade is None or usdt_liquid_percentage is None:
-                logger.error("Invalid trading parameters. Please check your configuration.")
-                st.error("Invalid trading parameters. Please check your configuration.")
-                return
-
-            initial_balance = simulated_balance if is_simulation else config_manager.get_config('simulation_mode')['initial_balance']
-            
-            logger.info("Initializing bot...")
-            bot = initialize_bot(is_simulation, usdt_liquid_percentage, initial_balance)
-            ui_manager.update_bot(bot)  # Update the bot in UIManager
-
-            logger.info("Displaying wallet balance...")
-            ui_manager.display_component('wallet_balance')
-
-            logger.info("Displaying simulation indicator...")
-            ui_manager.display_component('simulation_indicator', is_simulation=is_simulation)
-
-            logger.info("Fetching available trading symbols...")
-            available_symbols = config_manager.get_available_trading_symbols()
-            if not available_symbols:
-                logger.warning("No available trading symbols found. Please check your KuCoin API connection.")
-                st.warning("No available trading symbols found. Please check your KuCoin API connection.")
+        # Mode selection
+        is_simulation = st.sidebar.checkbox("Simulation Mode", value=config_manager.get_config('simulation_mode')['enabled'])
+        
+        if is_simulation:
+            st.sidebar.write("Running in simulation mode. No real trades will be executed.")
+            initial_balance = st.sidebar.number_input(
+                "Simulated USDT Balance",
+                min_value=0.0,
+                value=config_manager.get_config('simulation_mode')['initial_balance'],
+                step=0.1
+            )
+        else:
+            st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
+            st.sidebar.warning("Only proceed if you understand the risks and are using funds you can afford to lose.")
+            proceed = st.sidebar.checkbox("I understand the risks and want to proceed")
+            if not proceed:
+                st.sidebar.error("Please check the box to proceed with live trading.")
                 return
             
-            logger.info("Displaying symbol selector...")
-            user_selected_symbols = ui_manager.display_component('symbol_selector', available_symbols=available_symbols, default_symbols=config_manager.get_config('trading_symbols'))
-
-            if not user_selected_symbols:
-                logger.warning("No symbols selected for trading.")
-                st.warning("Please select at least one symbol to trade.")
+            if not ui_manager.display_component('live_trading_verification'):
                 return
+            
+            initial_balance = config_manager.get_config('simulation_mode')['initial_balance']
 
-            logger.info("Informing users about total fees and suggested profit margin.")
-            st.sidebar.info("Please note that the total fees for buying and selling are 0.2%. It is recommended to set a profit margin higher than 0.2% to cover the fees.")
+        # Trading parameters
+        st.sidebar.header("Trading Parameters")
+        usdt_liquid_percentage = st.sidebar.slider(
+            "Percentage of assets to keep liquid (0-100%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=config_manager.get_config('usdt_liquid_percentage', 0.5) * 100,
+            step=0.1
+        ) / 100
 
-            logger.info("Saving user inputs to session state...")
-            st.session_state.user_inputs = {
-                'user_selected_symbols': user_selected_symbols,
-                'profit_margin_percentage': profit_margin_percentage,
-                'num_orders_per_trade': num_orders_per_trade,
-                'usdt_liquid_percentage': usdt_liquid_percentage,
-            }
+        profit_margin_percentage = st.sidebar.slider(
+            "Profit Margin Percentage (0-100%)",
+            min_value=0.01,
+            max_value=100.0,
+            value=config_manager.get_config('profit_margin', 0.01) * 100,
+            step=0.01
+        ) / 100
 
-            logger.info("Updating symbol allocations...")
-            bot.update_allocations(user_selected_symbols)
+        num_orders_per_trade = st.sidebar.slider(
+            "Number of Orders",
+            min_value=1,
+            max_value=10,
+            value=config_manager.get_config('num_orders', 1),
+            step=1
+        )
 
-            logger.info("Displaying trading controls...")
-            start_button, stop_button = ui_manager.display_component('trading_controls')
+        # Initialize bot
+        bot = initialize_bot(is_simulation, usdt_liquid_percentage, initial_balance)
+        ui_manager.update_bot(bot)
 
-            if start_button and not st.session_state.is_trading:
-                logger.info("Starting trading...")
-                st.session_state.is_trading = True
-                bot.profit_margin = profit_margin_percentage
-                st.session_state.stop_event, st.session_state.trading_task = initialize_trading_loop(
-                    bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade
-                )
+        # Display wallet balance
+        ui_manager.display_component('wallet_balance')
 
-                # Update charts and status after starting the trading loop
-                logger.info("Updating charts and status...")
-                chart_creator = ChartCreator(bot)
-                charts = chart_creator.create_charts()
-                ui_manager.display_component('chart_display', charts=charts)
+        # Symbol selector
+        available_symbols = config_manager.get_available_trading_symbols()
+        if not available_symbols:
+            st.warning("No available trading symbols found. Please check your KuCoin API connection.")
+            return
+        
+        user_selected_symbols = st.sidebar.multiselect(
+            "Select Symbols to Trade",
+            available_symbols,
+            default=config_manager.get_config('trading_symbols')
+        )
 
-                current_prices = config_manager.fetch_real_time_prices(user_selected_symbols)
-                current_status = bot.get_current_status(current_prices)
-                ui_manager.display_component('status_table', current_status=current_status)
+        if not user_selected_symbols:
+            st.warning("Please select at least one symbol to trade.")
+            return
 
-                ui_manager.display_component('trade_messages')
+        # Save user inputs
+        st.session_state.user_inputs = {
+            'user_selected_symbols': user_selected_symbols,
+            'profit_margin_percentage': profit_margin_percentage,
+            'num_orders_per_trade': num_orders_per_trade,
+            'usdt_liquid_percentage': usdt_liquid_percentage,
+        }
 
-            if stop_button or (not st.session_state.is_trading and st.session_state.stop_event):
-                logger.info("Stopping trading...")
-                st.session_state.is_trading = False
-                if st.session_state.stop_event and st.session_state.trading_task:
-                    stop_trading_loop(st.session_state.stop_event, st.session_state.trading_task)
-                    st.session_state.stop_event = None
-                    st.session_state.trading_task = None
-                st.sidebar.success("Trading stopped.")
-                ui_manager.display_component('chart_display', charts={})  # Clear the charts
-                ui_manager.display_component('status_table', current_status={})  # Clear the status table
+        # Update bot allocations
+        bot.update_allocations(user_selected_symbols)
+
+        # Trading controls
+        start_button = st.sidebar.button("Start Trading")
+        stop_button = st.sidebar.button("Stop Trading")
+
+        if start_button and not st.session_state.is_trading:
+            st.session_state.is_trading = True
+            bot.profit_margin = profit_margin_percentage
+            st.session_state.stop_event, st.session_state.trading_task = initialize_trading_loop(
+                bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade
+            )
+
+            # Update charts and status
+            chart_creator = ChartCreator(bot)
+            charts = chart_creator.create_charts()
+            ui_manager.display_component('chart_display', charts=charts)
+
+            current_prices = config_manager.fetch_real_time_prices(user_selected_symbols)
+            current_status = bot.get_current_status(current_prices)
+            ui_manager.display_component('status_table', current_status=current_status)
+
+            ui_manager.display_component('trade_messages')
+
+        if stop_button or (not st.session_state.is_trading and st.session_state.stop_event):
+            st.session_state.is_trading = False
+            if st.session_state.stop_event and st.session_state.trading_task:
+                stop_trading_loop(st.session_state.stop_event, st.session_state.trading_task)
+                st.session_state.stop_event = None
+                st.session_state.trading_task = None
+            st.sidebar.success("Trading stopped.")
+            ui_manager.display_component('chart_display', charts={})
+            ui_manager.display_component('status_table', current_status={})
+
+        # Main area
+        if st.session_state.is_trading:
+            st.subheader("Trading Status")
+            current_prices = config_manager.fetch_real_time_prices(user_selected_symbols)
+            current_status = bot.get_current_status(current_prices)
+            ui_manager.display_component('status_table', current_status=current_status)
+
+            st.subheader("Trade Messages")
+            ui_manager.display_component('trade_messages')
+
+            st.subheader("Trading Charts")
+            chart_creator = ChartCreator(bot)
+            charts = chart_creator.create_charts()
+            ui_manager.display_component('chart_display', charts=charts)
+        else:
+            st.info("Click 'Start Trading' to begin trading.")
 
     except Exception as e:
         logger.error(f"An error occurred in the main function: {e}")
