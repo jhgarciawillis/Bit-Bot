@@ -26,11 +26,7 @@ def initialize_bot(is_simulation: bool, liquid_ratio: float) -> TradingBot:
     bot.is_simulation = is_simulation
     bot.wallet = create_wallet(is_simulation, liquid_ratio)
     
-    if not is_simulation:
-        logger.info("Live trading mode, initializing bot.")
-        bot.initialize()
-    else:
-        logger.info("Simulation mode, no need to initialize bot.")
+    bot.initialize()
     
     logger.info("Bot initialized successfully.")
     return bot
@@ -69,7 +65,7 @@ def main():
             st.session_state.user_inputs = {}
 
         logger.info("Configuring sidebar...")
-        is_simulation, liquid_ratio = ui_manager.display_component('sidebar_config')
+        is_simulation, simulated_balance = ui_manager.display_component('sidebar_config')
 
         if is_simulation is not None:
             logger.info(f"Simulation mode: {is_simulation}")
@@ -79,7 +75,10 @@ def main():
                     return
             
             logger.info("Initializing bot...")
+            liquid_ratio = config_manager.get_config('usdt_liquid_percentage')
             bot = initialize_bot(is_simulation, liquid_ratio)
+            if is_simulation:
+                bot.wallet.update_account_balance('trading', 'USDT', simulated_balance)
             ui_manager.update_bot(bot)  # Update the bot in UIManager
 
             logger.info("Displaying wallet balance...")
@@ -104,7 +103,6 @@ def main():
                 return
 
             logger.info("Displaying trading parameters...")
-            logger.info("Calling ui_manager.display_component('trading_parameters')")
             usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade = ui_manager.display_component('trading_parameters')
             logger.info(f"Received usdt_liquid_percentage: {usdt_liquid_percentage}, profit_margin_percentage: {profit_margin_percentage}, num_orders_per_trade: {num_orders_per_trade}")
 
@@ -134,6 +132,7 @@ def main():
             if start_button and not st.session_state.is_trading:
                 logger.info("Starting trading...")
                 st.session_state.is_trading = True
+                bot.profit_margin = profit_margin_percentage
                 st.session_state.stop_event, st.session_state.trading_task = initialize_trading_loop(
                     bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade
                 )
@@ -167,3 +166,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
