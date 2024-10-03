@@ -98,12 +98,12 @@ def main():
             step=0.1
         ) / 100
 
-        profit_margin_percentage = st.sidebar.slider(
-            "Profit Margin Percentage (0-100%)",
-            min_value=0.01,
-            max_value=100.0,
-            value=config_manager.get_config('profit_margin', 0.01) * 100,
-            step=0.01
+        profit_margin_percentage = st.sidebar.number_input(
+            "Profit Margin Percentage",
+            min_value=0.0001,
+            value=config_manager.get_config('profit_margin', 0.0001) * 100,
+            step=0.0001,
+            format="%.4f"
         ) / 100
 
         max_total_orders = st.sidebar.slider(
