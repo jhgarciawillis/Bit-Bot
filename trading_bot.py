@@ -1,191 +1,231 @@
 import logging
-from datetime import datetime
-from collections import deque
-from statistics import mean, stdev
-from typing import Dict, List, Optional, Tuple
-from wallet import create_wallet
-from config import config_manager
-from kucoin.client import Trade
+from typing import Dict, List, Any, Optional
+import streamlit as st
+from kucoin.client import Market, Trade, User
+import time
 
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def handle_trading_errors(func):
-    def wrapper(*args, **kwargs):
+# Default configurations
+DEFAULT_CONFIG = {
+    'trading_symbols': ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT'],
+    'profit_margin': 0.0001,  # 0.01% (changed from 0.01)
+    'num_orders': 1,
+    'liquid_ratio': 0.5,  # 50%
+    'simulation_mode': {
+        'enabled': True,
+        'initial_balance': 1000.0,
+    },
+    'chart_config': {
+        'update_interval': 1,  # in seconds
+        'history_length': 120,  # in minutes
+        'height': 600,
+        'width': 800,
+    },
+    'bot_config': {
+        'update_interval': 1,  # in seconds
+        'price_check_interval': 5,  # in seconds
+    },
+    'error_config': {
+        'max_retries': 3,
+        'retry_delay': 5,  # in seconds
+    },
+    'fees': {
+        'maker': 0.001,  # 0.1%
+        'taker': 0.001,  # 0.1%
+    },
+    'max_total_orders': 10,
+    'currency_allocations': {},
+}
+
+class KucoinClientManager:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(KucoinClientManager, cls).__new__(cls)
+            cls._instance.market_client = None
+            cls._instance.trade_client = None
+            cls._instance.user_client = None
+        return cls._instance
+
+    def initialize(self, api_key: str, api_secret: str, api_passphrase: str, api_url: str) -> None:
         try:
-            return func(*args, **kwargs)
+            logger.info("Initializing KuCoin clients.")
+            self.market_client = Market(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
+            self.trade_client = Trade(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
+            self.user_client = User(key=api_key, secret=api_secret, passphrase=api_passphrase, url=api_url)
+            logger.info("KuCoin clients initialized successfully")
         except Exception as e:
-            logger.error(f"An error occurred in {func.__name__}: {str(e)}")
-    return wrapper
+            logger.error(f"Failed to initialize KuCoin clients: {e}")
+            raise
 
-class TradingBot:
-    def __init__(self, update_interval: int, liquid_ratio: float):
-        self.wallet = None
-        self.update_interval = update_interval
-        self.liquid_ratio = liquid_ratio
-        self.symbol_allocations: Dict[str, float] = {}
-        self.price_history: Dict[str, deque] = {}
-        self.active_trades: Dict[str, Dict] = {}
-        self.total_trades: int = 0
-        self.status_history: List[Dict] = []
-        self.is_simulation: bool = False
-        self.profit_margin: float = 0
-        self.trade_client = None
-        self.max_total_orders: int = config_manager.get_max_total_orders()
-        self.currency_allocations: Dict[str, float] = config_manager.get_currency_allocations()
-        self.active_orders: Dict[str, List[Dict]] = {}
-
-    def initialize(self) -> None:
-        self.is_simulation = config_manager.get_config('simulation_mode')['enabled']
-        self.PRICE_HISTORY_LENGTH = config_manager.get_config('chart_config')['history_length']
-        self.wallet = create_wallet(self.is_simulation, self.liquid_ratio)
-        initial_balance = config_manager.get_config('simulation_mode')['initial_balance']
-        self.wallet.initialize_balance(initial_balance)
-        self.wallet.set_currency_allocations(self.currency_allocations)
-        
-        if not self.is_simulation:
-            self.update_wallet_balances()
-            self.trade_client = config_manager.kucoin_client_manager.get_client(Trade)
+    def get_client(self, client_type: type) -> Any:
+        if client_type == Market:
+            logger.info("Returning KuCoin Market client.")
+            return self.market_client
+        elif client_type == Trade:
+            logger.info("Returning KuCoin Trade client.")
+            return self.trade_client
+        elif client_type == User:
+            logger.info("Returning KuCoin User client.")
+            return self.user_client
         else:
-            self.trade_client = config_manager.create_simulated_trade_client()
+            logger.error(f"Unknown client type: {client_type}")
+            raise ValueError(f"Unknown client type: {client_type}")
 
-    @handle_trading_errors
-    def update_wallet_balances(self) -> None:
+kucoin_client_manager = KucoinClientManager()
+
+class ConfigManager:
+    def __init__(self):
+        self.config = None
+        logger.info("Initializing KuCoin client.")
+        self.initialize_kucoin_client()
+        logger.info("Loading configuration.")
+        self.config = self.load_config()
+
+    def load_config(self) -> Dict[str, Any]:
+        logger.info("Loading default configuration.")
+        config = DEFAULT_CONFIG.copy()
         try:
-            self.wallet.sync_with_exchange('trading')
-            logger.info(f"Updated wallet balances: {self.wallet.get_account_summary()}")
+            logger.info("Updating configuration with API credentials from Streamlit secrets.")
+            config.update({
+                'api_key': st.secrets["api_credentials"]["api_key"],
+                'api_secret': st.secrets["api_credentials"]["api_secret"],
+                'api_passphrase': st.secrets["api_credentials"]["api_passphrase"],
+                'api_url': 'https://api.kucoin.com',
+                'live_trading_access_key': st.secrets["api_credentials"]["live_trading_access_key"],
+            })
+        except KeyError as e:
+            logger.error(f"Missing API credential in Streamlit secrets: {e}")
+            raise
+        return config
+
+    def validate_trading_symbols(self, symbols: List[str]) -> List[str]:
+        logger.info("Validating trading symbols.")
+        available_symbols = self.get_available_trading_symbols()
+        valid_symbols = [symbol for symbol in symbols if symbol in available_symbols]
+        if len(valid_symbols) != len(symbols):
+            logger.warning(f"Some trading symbols are not available: {set(symbols) - set(valid_symbols)}")
+            logger.info(f"Using available trading symbols: {valid_symbols}")
+        return valid_symbols
+
+    def get_available_trading_symbols(self) -> List[str]:
+        logger.info("Fetching available trading symbols.")
+        try:
+            market_client = kucoin_client_manager.get_client(Market)
+            symbols = market_client.get_symbol_list()
+            return [symbol['symbol'] for symbol in symbols if symbol['quoteCurrency'] == 'USDT']
         except Exception as e:
-            logger.error(f"Error updating wallet balances: {e}")
+            logger.error(f"Unexpected error fetching symbol list: {e}")
+            return []
 
-    def get_tradable_balance(self, currency: str = 'USDT') -> float:
-        return self.wallet.get_tradable_balance(currency)
+    def verify_live_trading_access(self, input_key: str) -> bool:
+        logger.info(f"Verifying live trading access key: {input_key}")
+        return input_key == self.config['live_trading_access_key']
 
-    def get_user_allocations(self, user_selected_symbols: List[str]) -> Dict[str, float]:
-        tradable_usdt_amount = self.get_tradable_balance('USDT')
-        
-        if tradable_usdt_amount <= 0 or not user_selected_symbols:
+    def fetch_real_time_prices(self, symbols: List[str]) -> Dict[str, float]:
+        logger.info(f"Fetching real-time prices for symbols: {symbols}")
+        prices = {}
+        try:
+            market_client = kucoin_client_manager.get_client(Market)
+            for symbol in symbols:
+                logger.info(f"Fetching price for symbol: {symbol}")
+                ticker = market_client.get_ticker(symbol)
+                prices[symbol] = float(ticker['price'])
+            logger.info(f"Fetched real-time prices: {prices}")
+        except Exception as e:
+            logger.error(f"Unexpected error fetching real-time prices: {e}")
+        return prices
+
+    def place_spot_order(self, symbol: str, side: str, price: float, size: float, is_simulation: bool = False) -> Dict[str, Any]:
+        logger.info(f"Placing {side} order for {symbol} at price: {price}, size: {size}, simulation mode: {is_simulation}")
+        try:
+            if is_simulation:
+                fee = size * price * self.config['fees']['taker']
+                order = {
+                    'orderId': f'sim_{side}_{symbol}_{time.time()}',
+                    'symbol': symbol,
+                    'side': side,
+                    'price': price,
+                    'size': size,
+                    'fee': fee,
+                    'dealSize': size,
+                    'dealFunds': size * price,
+                }
+            else:
+                trade_client = kucoin_client_manager.get_client(Trade)
+                order = trade_client.create_limit_order(
+                    symbol=symbol,
+                    side=side,
+                    price=str(price),
+                    size=str(size)
+                )
+                # Fetch order details to get the actual filled amount and fees
+                order_details = trade_client.get_order_details(order['orderId'])
+                order.update({
+                    'dealSize': float(order_details['dealSize']),
+                    'dealFunds': float(order_details['dealFunds']),
+                    'fee': float(order_details['fee']),
+                })
+            logger.info(f"{'Simulated' if is_simulation else 'Placed'} {side} order for {symbol}: {order}")
+            return order
+        except Exception as e:
+            logger.error(f"Unexpected error {'simulating' if is_simulation else 'placing'} {side} order for {symbol}: {e}")
             return {}
 
-        return {symbol: tradable_usdt_amount * self.currency_allocations.get(symbol, 0) for symbol in user_selected_symbols}
+    def initialize_kucoin_client(self) -> None:
+        try:
+            logger.info("Initializing KuCoin client with API credentials from Streamlit secrets.")
+            kucoin_client_manager.initialize(
+                st.secrets["api_credentials"]["api_key"],
+                st.secrets["api_credentials"]["api_secret"],
+                st.secrets["api_credentials"]["api_passphrase"],
+                'https://api.kucoin.com'
+            )
+        except KeyError as e:
+            logger.error(f"Missing API credential in Streamlit secrets: {e}")
+            raise
 
-    def update_price_history(self, symbols: List[str], prices: Dict[str, float]) -> None:
-        for symbol in symbols:
-            if symbol not in self.price_history:
-                self.price_history[symbol] = deque(maxlen=self.PRICE_HISTORY_LENGTH)
-            if prices[symbol] is not None:
-                self.price_history[symbol].append({
-                    'timestamp': datetime.now(),
-                    'price': prices[symbol]
-                })
-                self.wallet.update_currency_price('trading', symbol, prices[symbol])
+    def get_account_list(self) -> List[Dict[str, Any]]:
+        logger.info("Fetching account list from KuCoin.")
+        try:
+            user_client = kucoin_client_manager.get_client(User)
+            return user_client.get_account_list()
+        except Exception as e:
+            logger.error(f"Unexpected error fetching account list: {e}")
+            return []
 
-    def should_buy(self, symbol: str, current_price: float) -> Optional[float]:
-        if current_price is None or len(self.price_history[symbol]) < self.PRICE_HISTORY_LENGTH:
-            return None
-        
-        prices = [entry['price'] for entry in self.price_history[symbol]]
-        price_mean = mean(prices)
-        price_stdev = stdev(prices) if len(set(prices)) > 1 else 0
-        
-        if current_price < price_mean and (price_mean - current_price) < price_stdev:
-            return price_mean
-        
-        return None
+    def update_config(self, key: str, value: Any) -> None:
+        logger.info(f"Updating configuration: {key} = {value}")
+        self.config[key] = value
 
-    def can_place_order(self, symbol: str) -> bool:
-        total_orders = sum(len(orders) for orders in self.active_orders.values())
-        return total_orders < self.max_total_orders
+    def get_config(self, key: str, default: Any = None) -> Any:
+        logger.info(f"Getting configuration value for key: {key}")
+        return self.config.get(key, default)
 
-    def get_available_balance(self, symbol: str) -> float:
-        return self.wallet.get_available_balance(symbol)
+    def set_max_total_orders(self, max_orders: int) -> None:
+        logger.info(f"Setting max total orders to: {max_orders}")
+        self.config['max_total_orders'] = max_orders
 
-    @handle_trading_errors
-    def place_buy_order(self, symbol: str, amount_usdt: float, limit_price: float) -> Optional[Dict]:
-        if not self.can_place_order(symbol) or amount_usdt > self.get_available_balance(symbol):
-            return None
-        
-        order = self.trade_client.create_limit_order(symbol, 'buy', str(limit_price), str(amount_usdt / limit_price))
-        
-        if order:
-            self.active_trades[order['id']] = {
-                'symbol': symbol,
-                'buy_price': float(order['price']),
-                'amount': float(order['dealSize']),
-                'fee': float(order['fee']),
-                'buy_time': datetime.now()
-            }
-            self.wallet.update_wallet_state('trading', symbol, float(order['dealSize']), float(order['price']), float(order['fee']), 'buy')
-            if symbol not in self.active_orders:
-                self.active_orders[symbol] = []
-            self.active_orders[symbol].append(order)
-            return order
-        return None
+    def get_max_total_orders(self) -> int:
+        return self.config['max_total_orders']
 
-    @handle_trading_errors
-    def place_sell_order(self, symbol: str, amount_crypto: float, target_sell_price: float) -> Optional[Dict]:
-        if not self.can_place_order(symbol):
-            return None
-        
-        order = self.trade_client.create_limit_order(symbol, 'sell', str(target_sell_price), str(amount_crypto))
-        
-        if order:
-            self.wallet.update_wallet_state('trading', symbol, float(order['dealSize']), float(order['price']), float(order['fee']), 'sell')
-            if symbol not in self.active_orders:
-                self.active_orders[symbol] = []
-            self.active_orders[symbol].append(order)
-            return order
-        return None
+    def set_currency_allocations(self, allocations: Dict[str, float]) -> None:
+        logger.info(f"Setting currency allocations: {allocations}")
+        self.config['currency_allocations'] = allocations
 
-    def get_current_status(self, prices: Dict[str, float]) -> Dict:
-        current_total_usdt = self.wallet.get_total_balance('USDT')
-        tradable_usdt = self.get_tradable_balance('USDT')
-        liquid_usdt = self.wallet.get_liquid_balance('USDT')
-        
-        status = {
-            'timestamp': datetime.now(),
-            'prices': prices,
-            'active_trades': self.active_trades.copy(),
-            'profits': self.wallet.get_profits(),
-            'total_profit': sum(self.wallet.get_profits().values()),
-            'current_total_usdt': current_total_usdt,
-            'tradable_usdt': tradable_usdt,
-            'liquid_usdt': liquid_usdt,
-            'wallet_summary': self.wallet.get_account_summary(),
-            'total_trades': self.total_trades,
-            'avg_profit_per_trade': sum(self.wallet.get_profits().values()) / self.total_trades if self.total_trades > 0 else 0,
-            'active_orders': {symbol: len(orders) for symbol, orders in self.active_orders.items()},
-        }
-        
-        self.status_history.append(status)
-        
-        if len(self.status_history) > 120:
-            self.status_history.pop(0)
-        
-        return status
+    def get_currency_allocations(self) -> Dict[str, float]:
+        return self.config['currency_allocations']
 
-    def update_allocations(self, user_selected_symbols: List[str]) -> None:
-        self.symbol_allocations = self.get_user_allocations(user_selected_symbols)
-        self.currency_allocations = {symbol: 1/len(user_selected_symbols) for symbol in user_selected_symbols}
-        self.wallet.set_currency_allocations(self.currency_allocations)
+config_manager = ConfigManager()
 
-    def calculate_profit(self, buy_order: Dict, sell_order: Dict) -> float:
-        buy_amount_usdt = float(buy_order['dealFunds'])
-        buy_fee_usdt = float(buy_order['fee'])
-        buy_amount_crypto = float(buy_order['dealSize'])
-
-        sell_amount_usdt = float(sell_order['dealFunds'])
-        sell_fee_usdt = float(sell_order['fee'])
-
-        actual_buy_amount_crypto = buy_amount_crypto - (buy_fee_usdt / buy_amount_usdt * buy_amount_crypto)
-        actual_sell_amount_usdt = sell_amount_usdt - sell_fee_usdt
-
-        profit = actual_sell_amount_usdt - buy_amount_usdt
-        return profit
-
-    def update_profit(self, symbol: str, profit: float) -> None:
-        self.wallet.update_profits(symbol, profit)
-        self.total_trades += 1
-
-def create_trading_bot(update_interval: int, liquid_ratio: float) -> TradingBot:
-    bot = TradingBot(update_interval, liquid_ratio)
-    bot.initialize()
-    return bot
+if __name__ == "__main__":
+    logger.info("Running config.py as the main script.")
+    logger.info(f"Loaded configuration: {config_manager.config}")
+    symbols = config_manager.get_available_trading_symbols()
+    logger.info(f"Available trading symbols: {symbols}")
+    prices = config_manager.fetch_real_time_prices(config_manager.config['trading_symbols'])
+    logger.info(f"Fetched real-time prices: {prices}")
