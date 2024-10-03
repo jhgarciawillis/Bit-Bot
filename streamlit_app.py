@@ -106,12 +106,11 @@ def main():
             step=0.01
         ) / 100
 
-        num_orders_per_trade = st.sidebar.slider(
-            "Number of Orders",
+        max_total_orders = st.sidebar.slider(
+            "Maximum Total Orders",
             min_value=1,
-            max_value=10,
-            value=config_manager.get_config('num_orders', 1),
-            step=1
+            max_value=50,
+            value=config_manager.get_config('max_total_orders', 10)
         )
 
         # Initialize bot
@@ -137,16 +136,37 @@ def main():
             st.warning("Please select at least one symbol to trade.")
             return
 
+        # Currency allocations
+        st.sidebar.subheader("Currency Allocations")
+        currency_allocations = {}
+        for symbol in user_selected_symbols:
+            allocation = st.sidebar.slider(
+                f"Allocation for {symbol} (%)",
+                min_value=0.0,
+                max_value=100.0,
+                value=100.0 / len(user_selected_symbols),
+                step=0.1
+            )
+            currency_allocations[symbol] = allocation / 100.0
+
+        # Normalize allocations
+        total_allocation = sum(currency_allocations.values())
+        if total_allocation != 0:
+            currency_allocations = {symbol: alloc / total_allocation for symbol, alloc in currency_allocations.items()}
+
         # Save user inputs
         st.session_state.user_inputs = {
             'user_selected_symbols': user_selected_symbols,
             'profit_margin_percentage': profit_margin_percentage,
-            'num_orders_per_trade': num_orders_per_trade,
+            'max_total_orders': max_total_orders,
             'usdt_liquid_percentage': usdt_liquid_percentage,
+            'currency_allocations': currency_allocations,
         }
 
-        # Update bot allocations
+        # Update bot configuration
+        bot.max_total_orders = max_total_orders
         bot.update_allocations(user_selected_symbols)
+        bot.wallet.set_currency_allocations(currency_allocations)
 
         # Trading controls
         start_button = st.sidebar.button("Start Trading")
@@ -156,7 +176,7 @@ def main():
             st.session_state.is_trading = True
             bot.profit_margin = profit_margin_percentage
             st.session_state.stop_event, st.session_state.trading_task = initialize_trading_loop(
-                bot, user_selected_symbols, profit_margin_percentage, num_orders_per_trade
+                bot, user_selected_symbols, profit_margin_percentage
             )
 
             # Update charts and status
