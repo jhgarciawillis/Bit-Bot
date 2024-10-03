@@ -44,6 +44,7 @@ class Account:
     def __init__(self, account_type: str):
         self.account_type: str = account_type
         self.currencies: Dict[str, Currency] = {}
+        self.currency_allocations: Dict[str, float] = {}
 
     def add_currency(self, symbol: str) -> None:
         if symbol not in self.currencies:
@@ -65,6 +66,15 @@ class Account:
         if symbol in self.currencies:
             self.currencies[symbol].update_price(price)
             logger.info(f"Updated price for {symbol} in account {self.account_type}: {price}")
+
+    def set_currency_allocations(self, allocations: Dict[str, float]) -> None:
+        self.currency_allocations = allocations
+        logger.info(f"Updated currency allocations for account {self.account_type}: {allocations}")
+
+    def get_available_balance(self, symbol: str) -> float:
+        if symbol in self.currencies:
+            return self.currencies[symbol].balance['trading'] * self.currency_allocations.get(symbol, 0)
+        return 0.0
 
 class Wallet:
     def __init__(self, is_simulation: bool, liquid_ratio: float):
@@ -203,6 +213,13 @@ class Wallet:
 
     def get_profits(self) -> Dict[str, float]:
         return self.profits
+
+    def set_currency_allocations(self, allocations: Dict[str, float]) -> None:
+        for account in self.accounts.values():
+            account.set_currency_allocations(allocations)
+
+    def get_available_balance(self, symbol: str) -> float:
+        return self.accounts['trading'].get_available_balance(symbol)
 
 def create_wallet(is_simulation: bool, liquid_ratio: float = 0.5) -> Wallet:
     wallet = Wallet(is_simulation, liquid_ratio)
