@@ -30,6 +30,9 @@ class TradingBot:
         self.is_simulation: bool = False
         self.profit_margin: float = 0
         self.trade_client = None
+        self.max_total_orders: int = config_manager.get_max_total_orders()
+        self.currency_allocations: Dict[str, float] = config_manager.get_currency_allocations()
+        self.active_orders: Dict[str, List[Dict]] = {}
 
     def initialize(self) -> None:
         self.is_simulation = config_manager.get_config('simulation_mode')['enabled']
@@ -37,6 +40,7 @@ class TradingBot:
         self.wallet = create_wallet(self.is_simulation, self.liquid_ratio)
         initial_balance = config_manager.get_config('simulation_mode')['initial_balance']
         self.wallet.initialize_balance(initial_balance)
+        self.wallet.set_currency_allocations(self.currency_allocations)
         
         if not self.is_simulation:
             self.update_wallet_balances()
@@ -61,7 +65,7 @@ class TradingBot:
         if tradable_usdt_amount <= 0 or not user_selected_symbols:
             return {}
 
-        return {symbol: tradable_usdt_amount / len(user_selected_symbols) for symbol in user_selected_symbols}
+        return {symbol: tradable_usdt_amount * self.currency_allocations.get(symbol, 0) for symbol in user_selected_symbols}
 
     def update_price_history(self, symbols: List[str], prices: Dict[str, float]) -> None:
         for symbol in symbols:
@@ -87,8 +91,18 @@ class TradingBot:
         
         return None
 
+    def can_place_order(self, symbol: str) -> bool:
+        total_orders = sum(len(orders) for orders in self.active_orders.values())
+        return total_orders < self.max_total_orders
+
+    def get_available_balance(self, symbol: str) -> float:
+        return self.wallet.get_available_balance(symbol)
+
     @handle_trading_errors
     def place_buy_order(self, symbol: str, amount_usdt: float, limit_price: float) -> Optional[Dict]:
+        if not self.can_place_order(symbol) or amount_usdt > self.get_available_balance(symbol):
+            return None
+        
         order = self.trade_client.create_limit_order(symbol, 'buy', str(limit_price), str(amount_usdt / limit_price))
         
         if order:
@@ -100,15 +114,24 @@ class TradingBot:
                 'buy_time': datetime.now()
             }
             self.wallet.update_wallet_state('trading', symbol, float(order['dealSize']), float(order['price']), float(order['fee']), 'buy')
+            if symbol not in self.active_orders:
+                self.active_orders[symbol] = []
+            self.active_orders[symbol].append(order)
             return order
         return None
 
     @handle_trading_errors
     def place_sell_order(self, symbol: str, amount_crypto: float, target_sell_price: float) -> Optional[Dict]:
+        if not self.can_place_order(symbol):
+            return None
+        
         order = self.trade_client.create_limit_order(symbol, 'sell', str(target_sell_price), str(amount_crypto))
         
         if order:
             self.wallet.update_wallet_state('trading', symbol, float(order['dealSize']), float(order['price']), float(order['fee']), 'sell')
+            if symbol not in self.active_orders:
+                self.active_orders[symbol] = []
+            self.active_orders[symbol].append(order)
             return order
         return None
 
@@ -129,6 +152,7 @@ class TradingBot:
             'wallet_summary': self.wallet.get_account_summary(),
             'total_trades': self.total_trades,
             'avg_profit_per_trade': sum(self.wallet.get_profits().values()) / self.total_trades if self.total_trades > 0 else 0,
+            'active_orders': {symbol: len(orders) for symbol, orders in self.active_orders.items()},
         }
         
         self.status_history.append(status)
@@ -140,6 +164,8 @@ class TradingBot:
 
     def update_allocations(self, user_selected_symbols: List[str]) -> None:
         self.symbol_allocations = self.get_user_allocations(user_selected_symbols)
+        self.currency_allocations = {symbol: 1/len(user_selected_symbols) for symbol in user_selected_symbols}
+        self.wallet.set_currency_allocations(self.currency_allocations)
 
     def calculate_profit(self, buy_order: Dict, sell_order: Dict) -> float:
         buy_amount_usdt = float(buy_order['dealFunds'])
