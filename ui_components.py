@@ -156,10 +156,9 @@ class TradingParameters(UIComponent):
         ) / 100
 
         profit_margin_percentage = st.sidebar.number_input(
-            "Profit Margin Percentage (0-100%)",
+            "Profit Margin Percentage",
             min_value=0.0001,
-            max_value=100.0,
-            value=config_manager.get_config('profit_margin', 0.01) * 100,
+            value=config_manager.get_config('profit_margin', 0.0001) * 100,
             step=0.0001,
             format="%.4f",
             key='profit_margin_percentage'
