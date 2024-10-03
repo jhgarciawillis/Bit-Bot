@@ -7,8 +7,13 @@ class SimulatedTradeClient:
     def __init__(self):
         self.orders = {}
         self.fees = config_manager.get_config('fees')
+        self.max_total_orders = config_manager.get_max_total_orders()
+        self.currency_allocations = config_manager.get_currency_allocations()
 
     def create_limit_order(self, symbol: str, side: str, price: str, size: str) -> Dict[str, Any]:
+        if len(self.orders) >= self.max_total_orders:
+            return {}
+
         order_id = str(uuid.uuid4())
         timestamp = int(time.time() * 1000)
         price = float(price)
@@ -102,6 +107,12 @@ class SimulatedTradeClient:
 
     def get_order_list(self, **kwargs) -> List[Dict[str, Any]]:
         return list(self.orders.values())
+
+    def update_max_total_orders(self, max_orders: int):
+        self.max_total_orders = max_orders
+
+    def update_currency_allocations(self, allocations: Dict[str, float]):
+        self.currency_allocations = allocations
 
 def create_simulated_trade_client() -> SimulatedTradeClient:
     return SimulatedTradeClient()
