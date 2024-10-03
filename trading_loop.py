@@ -72,7 +72,7 @@ class TradingLoop:
     def check_sell_condition(self, symbol: str, current_price: float) -> None:
         active_trades = [trade for trade in self.bot.active_trades.values() if trade['symbol'] == symbol]
         for active_trade in active_trades:
-            target_sell_price = active_trade['buy_price'] * (1 + self.profit_margin)
+            target_sell_price = self.bot.calculate_target_sell_price(active_trade['buy_price'])
             if current_price >= target_sell_price:
                 sell_amount = active_trade['amount']
                 sell_order = self.bot.place_sell_order(symbol, sell_amount, current_price)
