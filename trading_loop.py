@@ -22,7 +22,7 @@ class TradingLoop:
     def __init__(self, bot: TradingBot, chosen_symbols: List[str], profit_margin: float):
         self.bot = bot
         self.chosen_symbols = chosen_symbols
-        self.profit_margin = profit_margin if profit_margin is not None else config_manager.get_config('profit_margin', 0)
+        self.profit_margin = profit_margin if profit_margin is not None else config_manager.get_config('profit_margin')
 
     @handle_trading_errors
     def run(self, stop_event: threading.Event) -> None:
