@@ -35,7 +35,9 @@ DEFAULT_CONFIG = {
     'fees': {
         'maker': 0.001,  # 0.1%
         'taker': 0.001,  # 0.1%
-    }
+    },
+    'max_total_orders': 10,
+    'currency_allocations': {},
 }
 
 class KucoinClientManager:
@@ -203,6 +205,20 @@ class ConfigManager:
     def get_config(self, key: str, default: Any = None) -> Any:
         logger.info(f"Getting configuration value for key: {key}")
         return self.config.get(key, default)
+
+    def set_max_total_orders(self, max_orders: int) -> None:
+        logger.info(f"Setting max total orders to: {max_orders}")
+        self.config['max_total_orders'] = max_orders
+
+    def get_max_total_orders(self) -> int:
+        return self.config['max_total_orders']
+
+    def set_currency_allocations(self, allocations: Dict[str, float]) -> None:
+        logger.info(f"Setting currency allocations: {allocations}")
+        self.config['currency_allocations'] = allocations
+
+    def get_currency_allocations(self) -> Dict[str, float]:
+        return self.config['currency_allocations']
 
 config_manager = ConfigManager()
 
