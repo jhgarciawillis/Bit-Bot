@@ -33,6 +33,8 @@ class TradingBot:
         self.max_total_orders: int = config_manager.get_max_total_orders()
         self.currency_allocations: Dict[str, float] = config_manager.get_currency_allocations()
         self.active_orders: Dict[str, List[Dict]] = {}
+        self.maker_fee: float = config_manager.get_config('fees')['maker']
+        self.taker_fee: float = config_manager.get_config('fees')['taker']
 
     def initialize(self) -> None:
         self.is_simulation = config_manager.get_config('simulation_mode')['enabled']
@@ -185,7 +187,14 @@ class TradingBot:
         self.wallet.update_profits(symbol, profit)
         self.total_trades += 1
 
+    def calculate_target_sell_price(self, buy_price: float) -> float:
+        # Calculate the target sell price accounting for both buy and sell fees
+        return buy_price * (1 + self.profit_margin + self.maker_fee + self.taker_fee)
+
 def create_trading_bot(update_interval: int, liquid_ratio: float) -> TradingBot:
     bot = TradingBot(update_interval, liquid_ratio)
     bot.initialize()
     return bot
+
+# Make sure TradingBot and create_trading_bot are explicitly exported
+__all__ = ['TradingBot', 'create_trading_bot']
