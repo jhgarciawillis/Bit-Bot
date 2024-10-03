@@ -60,6 +60,7 @@ class StatusTable(UIComponent):
             'Target Sell Price': [self._format_target_sell_price(current_status['active_trades'], symbol, self.bot.profit_margin) for symbol in symbols],
             'Current P/L': [self._format_current_pl(current_status['prices'], current_status['active_trades'], symbol) for symbol in symbols],
             'Realized Profit': [self._format_realized_profit(current_status['profits'], symbol) for symbol in symbols],
+            'Active Orders': [current_status['active_orders'].get(symbol, 0) for symbol in symbols],
         }
 
     def _create_status_dataframe(self, current_status: Dict[str, Any]) -> pd.DataFrame:
@@ -75,6 +76,7 @@ class StatusTable(UIComponent):
             trade['buy_price'] * trade['amount']
             for trade in current_status['active_trades'].values()
         )
+        total_active_orders = sum(current_status['active_orders'].values())
         return {
             'Symbol': ['Total'],
             'Current Price': [f"{total_current_value:.4f} USDT"],
@@ -82,6 +84,7 @@ class StatusTable(UIComponent):
             'Target Sell Price': [''],
             'Current P/L': [f"{(total_current_value - total_buy_value) / total_buy_value * 100:.2f}%" if total_buy_value > 0 else 'N/A'],
             'Realized Profit': [f"{current_status['total_profit']:.4f} USDT"],
+            'Active Orders': [total_active_orders],
         }
 
     @staticmethod
@@ -162,16 +165,16 @@ class TradingParameters(UIComponent):
             key='profit_margin_percentage'
         ) / 100
 
-        num_orders_per_trade = st.sidebar.slider(
-            "Number of Orders",
+        max_total_orders = st.sidebar.slider(
+            "Maximum Total Orders",
             min_value=1,
-            max_value=10,
-            value=config_manager.get_config('num_orders', 1),
+            max_value=50,
+            value=config_manager.get_config('max_total_orders', 10),
             step=1,
-            key='num_orders_per_trade'
+            key='max_total_orders'
         )
 
-        return usdt_liquid_percentage, profit_margin_percentage, num_orders_per_trade
+        return usdt_liquid_percentage, profit_margin_percentage, max_total_orders
 
 class ChartDisplay(UIComponent):
     def display(self, charts: Dict[str, Any]) -> None:
@@ -214,6 +217,13 @@ class LiveTradingVerification(UIComponent):
             st.sidebar.error("Invalid live trading access key. Please try again.")
             return False
 
+class CurrencyAllocationDisplay(UIComponent):
+    def display(self, allocations: Dict[str, float]) -> None:
+        logger.info("Displaying currency allocations.")
+        st.sidebar.subheader("Currency Allocations")
+        for symbol, allocation in allocations.items():
+            st.sidebar.text(f"{symbol}: {allocation*100:.2f}%")
+
 def initialize_session_state() -> None:
     logger.info("Initializing session state.")
     if 'trade_messages' not in st.session_state:
@@ -236,6 +246,7 @@ class UIManager:
             'simulation_indicator': SimulationIndicator(),
             'wallet_balance': WalletBalance(bot),
             'live_trading_verification': LiveTradingVerification(),
+            'currency_allocation_display': CurrencyAllocationDisplay(),
         }
 
     def display_component(self, component_name: str, *args, **kwargs):
