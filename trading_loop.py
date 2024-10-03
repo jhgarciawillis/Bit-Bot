@@ -19,11 +19,10 @@ def handle_trading_errors(func):
     return wrapper
 
 class TradingLoop:
-    def __init__(self, bot: TradingBot, chosen_symbols: List[str], profit_margin: float, num_orders: int):
+    def __init__(self, bot: TradingBot, chosen_symbols: List[str], profit_margin: float):
         self.bot = bot
         self.chosen_symbols = chosen_symbols
         self.profit_margin = profit_margin if profit_margin is not None else config_manager.get_config('profit_margin', 0)
-        self.num_orders = num_orders if num_orders is not None else config_manager.get_config('num_orders', 1)
 
     @handle_trading_errors
     def run(self, stop_event: threading.Event) -> None:
@@ -52,23 +51,22 @@ class TradingLoop:
 
         self.bot.update_price_history([symbol], {symbol: current_price})
 
-        active_trade_count = sum(1 for trade in self.bot.active_trades.values() if trade['symbol'] == symbol)
-        if active_trade_count < self.num_orders:
+        if self.bot.can_place_order(symbol):
             self.check_buy_condition(symbol, current_price)
-        else:
-            self.check_sell_condition(symbol, current_price)
+        
+        self.check_sell_condition(symbol, current_price)
 
     @handle_trading_errors
     def check_buy_condition(self, symbol: str, current_price: float) -> None:
         should_buy = self.bot.should_buy(symbol, current_price)
         if should_buy is not None:
-            usdt_balance = self.bot.get_tradable_balance('USDT')
-            allocated_value = self.bot.symbol_allocations.get(symbol, 0)
-            if allocated_value > 0:
-                order_amount = min(allocated_value, usdt_balance)
-                order = self.bot.place_buy_order(symbol, order_amount, should_buy)
-                if order:
-                    logger.info(f"Placed buy order for {symbol}: {order['dealSize']:.8f} {symbol} at {should_buy:.4f} USDT")
+            available_balance = self.bot.get_available_balance(symbol)
+            if available_balance > 0:
+                order_amount = min(available_balance, self.bot.symbol_allocations.get(symbol, 0))
+                if order_amount > 0:
+                    order = self.bot.place_buy_order(symbol, order_amount, should_buy)
+                    if order:
+                        logger.info(f"Placed buy order for {symbol}: {order['dealSize']:.8f} {symbol} at {should_buy:.4f} USDT")
 
     @handle_trading_errors
     def check_sell_condition(self, symbol: str, current_price: float) -> None:
@@ -97,9 +95,9 @@ class TradingLoop:
 
         self.bot.update_allocations(self.chosen_symbols)
 
-def initialize_trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: float, num_orders: int) -> Tuple[threading.Event, threading.Thread]:
+def initialize_trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: float) -> Tuple[threading.Event, threading.Thread]:
     stop_event = threading.Event()
-    trading_loop = TradingLoop(bot, chosen_symbols, profit_margin, num_orders)
+    trading_loop = TradingLoop(bot, chosen_symbols, profit_margin)
     trading_thread = threading.Thread(target=trading_loop.run, args=(stop_event,))
     trading_thread.start()
     return stop_event, trading_thread
@@ -114,13 +112,12 @@ def stop_trading_loop(stop_event: threading.Event, trading_thread: threading.Thr
         logger.info("Trading loop stopped successfully.")
 
 if __name__ == "__main__":
-    bot = TradingBot(config_manager.get_config('bot_config')['update_interval'])
+    bot = TradingBot(config_manager.get_config('bot_config')['update_interval'], config_manager.get_config('liquid_ratio'))
     bot.initialize()
     chosen_symbols = config_manager.get_config('trading_symbols')
     profit_margin = config_manager.get_config('profit_margin')
-    num_orders = config_manager.get_config('num_orders')
     
-    stop_event, trading_thread = initialize_trading_loop(bot, chosen_symbols, profit_margin, num_orders)
+    stop_event, trading_thread = initialize_trading_loop(bot, chosen_symbols, profit_margin)
     
     # Run for 5 minutes
     time.sleep(300)
