@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 # Default configurations
 DEFAULT_CONFIG = {
     'trading_symbols': ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT'],
-    'profit_margin': 0.0001,  # 0.01% (changed from 0.01)
+    'profit_margin': 0.002,  # 0.2% (updated from 0.0001)
     'num_orders': 1,
     'liquid_ratio': 0.5,  # 50%
     'simulation_mode': {
