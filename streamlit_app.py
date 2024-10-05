@@ -64,54 +64,17 @@ def main():
         # Sidebar
         st.sidebar.header("Configuration")
 
+        # Trading controls
+        start_button, stop_button = ui_manager.display_component('trading_controls')
+
         # Mode selection
-        is_simulation = st.sidebar.checkbox("Simulation Mode", value=config_manager.get_config('simulation_mode')['enabled'])
+        is_simulation, initial_balance = ui_manager.display_component('sidebar_config')
         
-        if is_simulation:
-            st.sidebar.write("Running in simulation mode. No real trades will be executed.")
-            initial_balance = st.sidebar.number_input(
-                "Simulated USDT Balance",
-                min_value=0.0,
-                value=config_manager.get_config('simulation_mode')['initial_balance'],
-                step=0.1
-            )
-        else:
-            st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
-            st.sidebar.warning("Only proceed if you understand the risks and are using funds you can afford to lose.")
-            proceed = st.sidebar.checkbox("I understand the risks and want to proceed")
-            if not proceed:
-                st.sidebar.error("Please check the box to proceed with live trading.")
-                return
-            
-            if not ui_manager.display_component('live_trading_verification'):
-                return
-            
-            initial_balance = config_manager.get_config('simulation_mode')['initial_balance']
+        if is_simulation is None:
+            return
 
         # Trading parameters
-        st.sidebar.header("Trading Parameters")
-        usdt_liquid_percentage = st.sidebar.slider(
-            "Percentage of assets to keep liquid (0-100%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=config_manager.get_config('usdt_liquid_percentage', 0.5) * 100,
-            step=0.1
-        ) / 100
-
-        profit_margin_percentage = st.sidebar.number_input(
-            "Profit Margin Percentage",
-            min_value=0.0001,
-            value=config_manager.get_config('profit_margin', 0.0001) * 100,
-            step=0.0001,
-            format="%.4f"
-        ) / 100
-
-        max_total_orders = st.sidebar.slider(
-            "Maximum Total Orders",
-            min_value=1,
-            max_value=50,
-            value=config_manager.get_config('max_total_orders', 10)
-        )
+        usdt_liquid_percentage, profit_margin_percentage, max_total_orders = ui_manager.display_component('trading_parameters')
 
         # Initialize bot
         bot = initialize_bot(is_simulation, usdt_liquid_percentage, initial_balance)
@@ -126,18 +89,13 @@ def main():
             st.warning("No available trading symbols found. Please check your KuCoin API connection.")
             return
         
-        user_selected_symbols = st.sidebar.multiselect(
-            "Select Symbols to Trade",
-            available_symbols,
-            default=config_manager.get_config('trading_symbols')
-        )
+        user_selected_symbols = ui_manager.display_component('symbol_selector', available_symbols=available_symbols, default_symbols=config_manager.get_config('trading_symbols'))
 
         if not user_selected_symbols:
             st.warning("Please select at least one symbol to trade.")
             return
 
         # Currency allocations
-        st.sidebar.subheader("Currency Allocations")
         currency_allocations = {}
         for symbol in user_selected_symbols:
             allocation = st.sidebar.slider(
@@ -154,6 +112,8 @@ def main():
         if total_allocation != 0:
             currency_allocations = {symbol: alloc / total_allocation for symbol, alloc in currency_allocations.items()}
 
+        ui_manager.display_component('currency_allocation_display', allocations=currency_allocations)
+
         # Save user inputs
         st.session_state.user_inputs = {
             'user_selected_symbols': user_selected_symbols,
@@ -167,10 +127,6 @@ def main():
         bot.max_total_orders = max_total_orders
         bot.update_allocations(user_selected_symbols)
         bot.wallet.set_currency_allocations(currency_allocations)
-
-        # Trading controls
-        start_button = st.sidebar.button("Start Trading")
-        stop_button = st.sidebar.button("Stop Trading")
 
         if start_button and not st.session_state.is_trading:
             st.session_state.is_trading = True
@@ -216,6 +172,9 @@ def main():
             ui_manager.display_component('chart_display', charts=charts)
         else:
             st.info("Click 'Start Trading' to begin trading.")
+
+        # Display simulation indicator
+        ui_manager.display_component('simulation_indicator', is_simulation=is_simulation)
 
     except Exception as e:
         logger.error(f"An error occurred in the main function: {e}")
