@@ -3,6 +3,9 @@ from typing import Dict, List, Any, Optional
 import streamlit as st
 from kucoin.client import Market, Trade, User
 import time
+from simulated_trade_client import SimulatedTradeClient
+from simulated_market_client import SimulatedMarketClient
+from simulated_user_client import SimulatedUserClient
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -11,7 +14,7 @@ logger = logging.getLogger(__name__)
 # Default configurations
 DEFAULT_CONFIG = {
     'trading_symbols': ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT'],
-    'profit_margin': 0.002,  # 0.2% (updated from 0.0001)
+    'profit_margin': 0.002,  # 0.2%
     'num_orders': 1,
     'liquid_ratio': 0.5,  # 50%
     'simulation_mode': {
@@ -144,17 +147,8 @@ class ConfigManager:
         logger.info(f"Placing {side} order for {symbol} at price: {price}, size: {size}, simulation mode: {is_simulation}")
         try:
             if is_simulation:
-                fee = size * price * self.config['fees']['taker']
-                order = {
-                    'orderId': f'sim_{side}_{symbol}_{time.time()}',
-                    'symbol': symbol,
-                    'side': side,
-                    'price': price,
-                    'size': size,
-                    'fee': fee,
-                    'dealSize': size,
-                    'dealFunds': size * price,
-                }
+                simulated_trade_client = self.create_simulated_trade_client()
+                order = simulated_trade_client.create_limit_order(symbol, side, str(price), str(size))
             else:
                 trade_client = kucoin_client_manager.get_client(Trade)
                 order = trade_client.create_limit_order(
@@ -163,13 +157,6 @@ class ConfigManager:
                     price=str(price),
                     size=str(size)
                 )
-                # Fetch order details to get the actual filled amount and fees
-                order_details = trade_client.get_order_details(order['orderId'])
-                order.update({
-                    'dealSize': float(order_details['dealSize']),
-                    'dealFunds': float(order_details['dealFunds']),
-                    'fee': float(order_details['fee']),
-                })
             logger.info(f"{'Simulated' if is_simulation else 'Placed'} {side} order for {symbol}: {order}")
             return order
         except Exception as e:
@@ -219,6 +206,15 @@ class ConfigManager:
 
     def get_currency_allocations(self) -> Dict[str, float]:
         return self.config['currency_allocations']
+
+    def create_simulated_trade_client(self) -> SimulatedTradeClient:
+        return SimulatedTradeClient()
+
+    def create_simulated_market_client(self) -> SimulatedMarketClient:
+        return SimulatedMarketClient()
+
+    def create_simulated_user_client(self) -> SimulatedUserClient:
+        return SimulatedUserClient()
 
 config_manager = ConfigManager()
 
