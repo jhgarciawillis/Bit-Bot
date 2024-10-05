@@ -8,6 +8,7 @@ from chart_utils import ChartCreator
 from trading_loop import initialize_trading_loop, stop_trading_loop
 from ui_components import UIManager
 from wallet import create_wallet
+from kucoin.client import Client
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -63,9 +64,6 @@ def main():
 
         # Sidebar
         st.sidebar.header("Configuration")
-
-        # Trading controls
-        start_button, stop_button = ui_manager.display_component('trading_controls')
 
         # Mode selection
         is_simulation, initial_balance = ui_manager.display_component('sidebar_config')
@@ -128,12 +126,30 @@ def main():
         bot.update_allocations(user_selected_symbols)
         bot.wallet.set_currency_allocations(currency_allocations)
 
+        # Live trading verification
+        if not is_simulation:
+            if not ui_manager.display_component('live_trading_verification'):
+                st.warning("Live trading access not verified. Please enter the correct access key.")
+                return
+
+            # Initialize KuCoin client for live trading
+            api_key = st.secrets["api_credentials"]["api_key"]
+            api_secret = st.secrets["api_credentials"]["api_secret"]
+            api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
+            kucoin_client = Client(api_key, api_secret, api_passphrase)
+            bot.set_kucoin_client(kucoin_client)
+
+        # Move trading controls to the bottom of the sidebar
+        st.sidebar.markdown("---")  # Add a separator
+        start_button, stop_button = ui_manager.display_component('trading_controls')
+
         if start_button and not st.session_state.is_trading:
             st.session_state.is_trading = True
             bot.profit_margin = profit_margin_percentage
             st.session_state.stop_event, st.session_state.trading_task = initialize_trading_loop(
                 bot, user_selected_symbols, profit_margin_percentage
             )
+            st.sidebar.success("Trading started.")
 
             # Update charts and status
             chart_creator = ChartCreator(bot)
