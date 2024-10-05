@@ -5,7 +5,7 @@ from statistics import mean, stdev
 from typing import Dict, List, Optional, Tuple
 from wallet import create_wallet
 from config import config_manager
-from kucoin.client import Client, Market, Trade
+from kucoin.client import Market, Trade, User
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,9 @@ class TradingBot:
         self.status_history: List[Dict] = []
         self.is_simulation: bool = False
         self.profit_margin: float = config_manager.get_config('profit_margin')
-        self.kucoin_client: Optional[Client] = None
+        self.kucoin_market_client: Optional[Market] = None
+        self.kucoin_trade_client: Optional[Trade] = None
+        self.kucoin_user_client: Optional[User] = None
         self.max_total_orders: int = config_manager.get_max_total_orders()
         self.currency_allocations: Dict[str, float] = config_manager.get_currency_allocations()
         self.active_orders: Dict[str, List[Dict]] = {}
@@ -47,10 +49,14 @@ class TradingBot:
         if not self.is_simulation:
             self.update_wallet_balances()
         else:
-            self.kucoin_client = config_manager.create_simulated_trade_client()
+            self.kucoin_market_client = config_manager.create_simulated_market_client()
+            self.kucoin_trade_client = config_manager.create_simulated_trade_client()
+            self.kucoin_user_client = config_manager.create_simulated_user_client()
 
-    def set_kucoin_client(self, client: Client) -> None:
-        self.kucoin_client = client
+    def set_kucoin_clients(self, market_client: Market, trade_client: Trade, user_client: User) -> None:
+        self.kucoin_market_client = market_client
+        self.kucoin_trade_client = trade_client
+        self.kucoin_user_client = user_client
 
     @handle_trading_errors
     def update_wallet_balances(self) -> None:
@@ -132,8 +138,7 @@ class TradingBot:
 
     def _place_live_buy_order(self, symbol: str, amount_usdt: float, limit_price: float) -> Optional[Dict]:
         try:
-            trade_client = Trade(self.kucoin_client)
-            order = trade_client.create_limit_order(
+            order = self.kucoin_trade_client.create_limit_order(
                 symbol=symbol,
                 side='buy',
                 price=str(limit_price),
@@ -168,8 +173,7 @@ class TradingBot:
 
     def _place_live_sell_order(self, symbol: str, amount_crypto: float, target_sell_price: float) -> Optional[Dict]:
         try:
-            trade_client = Trade(self.kucoin_client)
-            order = trade_client.create_limit_order(
+            order = self.kucoin_trade_client.create_limit_order(
                 symbol=symbol,
                 side='sell',
                 price=str(target_sell_price),
