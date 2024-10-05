@@ -5,7 +5,7 @@ from statistics import mean, stdev
 from typing import Dict, List, Optional, Tuple
 from wallet import create_wallet
 from config import config_manager
-from kucoin.client import Trade
+from kucoin.client import Client, Market, Trade
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class TradingBot:
         self.status_history: List[Dict] = []
         self.is_simulation: bool = False
         self.profit_margin: float = config_manager.get_config('profit_margin')
-        self.trade_client = None
+        self.kucoin_client: Optional[Client] = None
         self.max_total_orders: int = config_manager.get_max_total_orders()
         self.currency_allocations: Dict[str, float] = config_manager.get_currency_allocations()
         self.active_orders: Dict[str, List[Dict]] = {}
@@ -46,9 +46,11 @@ class TradingBot:
         
         if not self.is_simulation:
             self.update_wallet_balances()
-            self.trade_client = config_manager.kucoin_client_manager.get_client(Trade)
         else:
-            self.trade_client = config_manager.create_simulated_trade_client()
+            self.kucoin_client = config_manager.create_simulated_trade_client()
+
+    def set_kucoin_client(self, client: Client) -> None:
+        self.kucoin_client = client
 
     @handle_trading_errors
     def update_wallet_balances(self) -> None:
@@ -105,10 +107,16 @@ class TradingBot:
         if not self.can_place_order(symbol) or amount_usdt > self.get_available_balance(symbol):
             return None
         
-        order = self.trade_client.create_limit_order(symbol, 'buy', str(limit_price), str(amount_usdt / limit_price))
+        if self.is_simulation:
+            return self._place_simulated_buy_order(symbol, amount_usdt, limit_price)
+        else:
+            return self._place_live_buy_order(symbol, amount_usdt, limit_price)
+
+    def _place_simulated_buy_order(self, symbol: str, amount_usdt: float, limit_price: float) -> Optional[Dict]:
+        order = config_manager.place_spot_order(symbol, 'buy', limit_price, amount_usdt / limit_price, True)
         
         if order:
-            self.active_trades[order['id']] = {
+            self.active_trades[order['orderId']] = {
                 'symbol': symbol,
                 'buy_price': float(order['price']),
                 'amount': float(order['dealSize']),
@@ -122,12 +130,33 @@ class TradingBot:
             return order
         return None
 
+    def _place_live_buy_order(self, symbol: str, amount_usdt: float, limit_price: float) -> Optional[Dict]:
+        try:
+            trade_client = Trade(self.kucoin_client)
+            order = trade_client.create_limit_order(
+                symbol=symbol,
+                side='buy',
+                price=str(limit_price),
+                size=str(amount_usdt / limit_price)
+            )
+            self._process_order_response(order, 'buy', symbol, amount_usdt, limit_price)
+            return order
+        except Exception as e:
+            logger.error(f"Error placing live buy order: {e}")
+            return None
+
     @handle_trading_errors
     def place_sell_order(self, symbol: str, amount_crypto: float, target_sell_price: float) -> Optional[Dict]:
         if not self.can_place_order(symbol):
             return None
         
-        order = self.trade_client.create_limit_order(symbol, 'sell', str(target_sell_price), str(amount_crypto))
+        if self.is_simulation:
+            return self._place_simulated_sell_order(symbol, amount_crypto, target_sell_price)
+        else:
+            return self._place_live_sell_order(symbol, amount_crypto, target_sell_price)
+
+    def _place_simulated_sell_order(self, symbol: str, amount_crypto: float, target_sell_price: float) -> Optional[Dict]:
+        order = config_manager.place_spot_order(symbol, 'sell', target_sell_price, amount_crypto, True)
         
         if order:
             self.wallet.update_wallet_state('trading', symbol, float(order['dealSize']), float(order['price']), float(order['fee']), 'sell')
@@ -136,6 +165,35 @@ class TradingBot:
             self.active_orders[symbol].append(order)
             return order
         return None
+
+    def _place_live_sell_order(self, symbol: str, amount_crypto: float, target_sell_price: float) -> Optional[Dict]:
+        try:
+            trade_client = Trade(self.kucoin_client)
+            order = trade_client.create_limit_order(
+                symbol=symbol,
+                side='sell',
+                price=str(target_sell_price),
+                size=str(amount_crypto)
+            )
+            self._process_order_response(order, 'sell', symbol, amount_crypto, target_sell_price)
+            return order
+        except Exception as e:
+            logger.error(f"Error placing live sell order: {e}")
+            return None
+
+    def _process_order_response(self, order: Dict, side: str, symbol: str, amount: float, price: float) -> None:
+        if side == 'buy':
+            self.active_trades[order['orderId']] = {
+                'symbol': symbol,
+                'buy_price': float(price),
+                'amount': float(amount),
+                'fee': float(order.get('fee', 0)),
+                'buy_time': datetime.now()
+            }
+        self.wallet.update_wallet_state('trading', symbol, float(amount), float(price), float(order.get('fee', 0)), side)
+        if symbol not in self.active_orders:
+            self.active_orders[symbol] = []
+        self.active_orders[symbol].append(order)
 
     def get_current_status(self, prices: Dict[str, float]) -> Dict:
         current_total_usdt = self.wallet.get_total_balance('USDT')
@@ -188,7 +246,6 @@ class TradingBot:
         self.total_trades += 1
 
     def calculate_target_sell_price(self, buy_price: float) -> float:
-        # Calculate the target sell price accounting for both buy and sell fees
         return buy_price * (1 + self.profit_margin + self.maker_fee + self.taker_fee)
 
 def create_trading_bot(update_interval: int, liquid_ratio: float) -> TradingBot:
