@@ -10,9 +10,9 @@ class UIComponent:
     def display(self, *args, **kwargs):
         raise NotImplementedError("Subclasses must implement display method")
 
-class SidebarConfig(UIComponent):
-    def display(self) -> Tuple[bool, Optional[float]]:
-        logger.info("Displaying sidebar configuration.")
+class SidebarControls(UIComponent):
+    def display(self) -> Tuple[bool, Optional[float], float, float, int]:
+        logger.info("Displaying sidebar controls.")
         st.sidebar.header("Configuration")
         is_simulation = st.sidebar.checkbox("Simulation Mode", value=config_manager.get_config('simulation_mode')['enabled'], key='is_simulation')
         if is_simulation:
@@ -25,7 +25,6 @@ class SidebarConfig(UIComponent):
                 step=0.1,
                 key='simulated_usdt_balance'
             )
-            return is_simulation, simulated_usdt_balance
         else:
             logger.info("Live trading mode selected.")
             st.sidebar.warning("WARNING: This bot will use real funds on the live KuCoin exchange.")
@@ -34,8 +33,38 @@ class SidebarConfig(UIComponent):
             if not proceed:
                 logger.info("User did not proceed with live trading.")
                 st.sidebar.error("Please check the box to proceed with live trading.")
-                return None, None
-            return is_simulation, None
+                return None, None, None, None, None
+            simulated_usdt_balance = None
+            
+        usdt_liquid_percentage = st.sidebar.number_input(
+            "Enter the percentage of your assets to keep liquid in USDT (0-100%)",
+            min_value=0.0,
+            max_value=100.0,
+            value=config_manager.get_config('liquid_ratio', 0.5) * 100,
+            step=0.0001,
+            format="%.4f",
+            key='usdt_liquid_percentage'
+        ) / 100
+
+        profit_margin_percentage = st.sidebar.number_input(
+            "Profit Margin Percentage",
+            min_value=0.0001,
+            value=config_manager.get_config('profit_margin', 0.0001) * 100,
+            step=0.0001,
+            format="%.4f",
+            key='profit_margin_percentage'
+        ) / 100
+
+        max_total_orders = st.sidebar.slider(
+            "Maximum Total Orders",
+            min_value=1,
+            max_value=50,
+            value=config_manager.get_config('max_total_orders', 10),
+            step=1,
+            key='max_total_orders'
+        )
+
+        return is_simulation, simulated_usdt_balance, usdt_liquid_percentage, profit_margin_percentage, max_total_orders
 
 class StatusTable(UIComponent):
     def __init__(self, bot):
@@ -123,11 +152,10 @@ class TradeMessages(UIComponent):
         st.text("\n".join(st.session_state.trade_messages[-10:]))  # Display last 10 messages
 
 class ErrorMessage(UIComponent):
-    def display(self, *args, **kwargs) -> None:
-        if 'error_message' in st.session_state and st.session_state.error_message:
-            logger.error(f"Displaying error message: {st.session_state.error_message}")
-            st.error(st.session_state.error_message)
-            st.session_state.error_message = ""  # Clear the error message after displaying
+    def display(self, error_message: str, container) -> None:
+        if error_message:
+            logger.error(f"Displaying error message: {error_message}")
+            container.error(error_message)
 
 class TradingControls(UIComponent):
     def display(self) -> Tuple[bool, bool]:
@@ -141,39 +169,6 @@ class SymbolSelector(UIComponent):
     def display(self, available_symbols: List[str], default_symbols: List[str]) -> List[str]:
         logger.info("Displaying symbol selector.")
         return st.sidebar.multiselect("Select Symbols to Trade", available_symbols, default=default_symbols, key='selected_symbols')
-
-class TradingParameters(UIComponent):
-    def display(self) -> Tuple[float, float, int]:
-        logger.info("Displaying trading parameters.")
-        usdt_liquid_percentage = st.sidebar.number_input(
-            "Enter the percentage of your assets to keep liquid in USDT (0-100%)",
-            min_value=0.0,
-            max_value=100.0,
-            value=config_manager.get_config('usdt_liquid_percentage', 0.5) * 100,
-            step=0.0001,
-            format="%.4f",
-            key='usdt_liquid_percentage'
-        ) / 100
-
-        profit_margin_percentage = st.sidebar.number_input(
-            "Profit Margin Percentage",
-            min_value=0.0001,
-            value=config_manager.get_config('profit_margin', 0.0001) * 100,
-            step=0.0001,
-            format="%.4f",
-            key='profit_margin_percentage'
-        ) / 100
-
-        max_total_orders = st.sidebar.slider(
-            "Maximum Total Orders",
-            min_value=1,
-            max_value=50,
-            value=config_manager.get_config('max_total_orders', 10),
-            step=1,
-            key='max_total_orders'
-        )
-
-        return usdt_liquid_percentage, profit_margin_percentage, max_total_orders
 
 class ChartDisplay(UIComponent):
     def display(self, charts: Dict[str, Any]) -> None:
@@ -190,62 +185,18 @@ class SimulationIndicator(UIComponent):
         else:
             st.sidebar.success("Running in Live Trading Mode")
 
-class WalletBalance(UIComponent):
-    def __init__(self, bot):
-        self.bot = bot
-
-    def display(self) -> None:
-        logger.info("Displaying wallet balance.")
-        total_balance = self.bot.wallet.get_total_balance('USDT')
-        liquid_usdt = self.bot.wallet.get_liquid_balance('USDT')
-        trading_usdt = self.bot.wallet.get_tradable_balance('USDT')
-        st.sidebar.info(f"Total Balance: {total_balance:.2f} USDT")
-        st.sidebar.info(f"Liquid USDT: {liquid_usdt:.2f}")
-        st.sidebar.info(f"Trading USDT: {trading_usdt:.2f}")
-
-class LiveTradingVerification(UIComponent):
-    def display(self) -> bool:
-        logger.info("Displaying live trading verification.")
-        live_trading_key = st.sidebar.text_input("Enter live trading access key", type="password")
-        if config_manager.verify_live_trading_access(live_trading_key):
-            logger.info("Live trading access key verified.")
-            st.sidebar.success("Live trading access key verified.")
-            return True
-        else:
-            logger.info("Invalid live trading access key.")
-            st.sidebar.error("Invalid live trading access key. Please try again.")
-            return False
-
-class CurrencyAllocationDisplay(UIComponent):
-    def display(self, allocations: Dict[str, float]) -> None:
-        logger.info("Displaying currency allocations.")
-        st.sidebar.subheader("Currency Allocations")
-        for symbol, allocation in allocations.items():
-            st.sidebar.text(f"{symbol}: {allocation*100:.2f}%")
-
-def initialize_session_state() -> None:
-    logger.info("Initializing session state.")
-    if 'trade_messages' not in st.session_state:
-        st.session_state.trade_messages = []
-    if 'error_message' not in st.session_state:
-        st.session_state.error_message = ""
-
 class UIManager:
     def __init__(self, bot):
         self.bot = bot
         self.components = {
-            'sidebar_config': SidebarConfig(),
+            'sidebar_controls': SidebarControls(),
             'status_table': StatusTable(bot),
             'trade_messages': TradeMessages(),
             'error_message': ErrorMessage(),
             'trading_controls': TradingControls(),
             'symbol_selector': SymbolSelector(),
-            'trading_parameters': TradingParameters(),
             'chart_display': ChartDisplay(),
             'simulation_indicator': SimulationIndicator(),
-            'wallet_balance': WalletBalance(bot),
-            'live_trading_verification': LiveTradingVerification(),
-            'currency_allocation_display': CurrencyAllocationDisplay(),
         }
 
     def display_component(self, component_name: str, *args, **kwargs):
@@ -255,13 +206,3 @@ class UIManager:
         else:
             logger.error(f"Component '{component_name}' not found")
             st.error(f"UI component '{component_name}' not found")
-
-    def initialize(self):
-        logger.info("Initializing UIManager.")
-        initialize_session_state()
-
-    def update_bot(self, bot):
-        logger.info("Updating bot in UIManager.")
-        self.bot = bot
-        self.components['status_table'] = StatusTable(bot)
-        self.components['wallet_balance'] = WalletBalance(bot)
