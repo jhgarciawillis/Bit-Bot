@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 import logging
 from config import config_manager
-from kucoin.client import Client
+from kucoin.client import Trade
 
 logger = logging.getLogger(__name__)
 
