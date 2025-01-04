@@ -1,6 +1,6 @@
 import logging
 from typing import Any, Callable
-from kucoin.client import Client
+from kucoin.client import Trade as KucoinClient
 
 logger = logging.getLogger(__name__)
 
