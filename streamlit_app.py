@@ -3,41 +3,21 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any
 from config import config_manager
-from trading_bot import TradingBot, create_trading_bot
+from trading_bot import TradingBot
 from chart_utils import ChartCreator
 from trading_loop import initialize_trading_loop, stop_trading_loop
 from ui_components import UIManager
-from wallet import create_wallet
-from kucoin.client import Client
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def initialize_bot(is_simulation: bool, liquid_ratio: float, initial_balance: float) -> TradingBot:
-    logger.info("Initializing bot...")
-    bot = st.session_state.get('bot')
-    if bot is None:
-        logger.info("Creating a new bot instance.")
-        bot = create_trading_bot(config_manager.get_config('bot_config')['update_interval'], liquid_ratio)
-        st.session_state['bot'] = bot
-    else:
-        logger.info("Using existing bot instance.")
-    
-    bot.is_simulation = is_simulation
-    bot.wallet = create_wallet(is_simulation, liquid_ratio)
-    bot.wallet.initialize_balance(initial_balance)
-    
-    bot.initialize()
-    
-    logger.info("Bot initialized successfully.")
-    return bot
-
-def save_chart(fig, filename):
-    logger.info(f"Saving chart as {filename}...")
-    fig.write_image(filename)
-    logger.info(f"Chart saved as {filename}")
-    st.success(f"Chart saved as {filename}")
+def initialize_session_state() -> None:
+    logger.info("Initializing session state.")
+    if 'trade_messages' not in st.session_state:
+        st.session_state.trade_messages = []
+    if 'error_message' not in st.session_state:
+        st.session_state.error_message = ""
 
 def main():
     logger.info("Starting main function...")
@@ -51,7 +31,7 @@ def main():
         logger.info("Initializing KuCoin client...")
         config_manager.initialize_kucoin_client()
         logger.info("Initializing session state...")
-        ui_manager.initialize()
+        initialize_session_state()
 
         if 'is_trading' not in st.session_state:
             st.session_state.is_trading = False
@@ -62,24 +42,16 @@ def main():
         if 'user_inputs' not in st.session_state:
             st.session_state.user_inputs = {}
 
-        # Sidebar
-        st.sidebar.header("Configuration")
-
-        # Mode selection
-        is_simulation, initial_balance = ui_manager.display_component('sidebar_config')
+        # Sidebar controls
+        is_simulation, initial_balance, liquid_ratio, profit_margin_percentage, max_total_orders = ui_manager.display_component('sidebar_controls')
         
         if is_simulation is None:
             return
 
-        # Trading parameters
-        usdt_liquid_percentage, profit_margin_percentage, max_total_orders = ui_manager.display_component('trading_parameters')
-
         # Initialize bot
-        bot = initialize_bot(is_simulation, usdt_liquid_percentage, initial_balance)
-        ui_manager.update_bot(bot)
-
-        # Display wallet balance
-        ui_manager.display_component('wallet_balance')
+        bot = TradingBot(config_manager.get_config('bot_config')['update_interval'], liquid_ratio)
+        bot.initialize()
+        ui_manager.bot = bot  # Update UI manager with the initialized bot
 
         # Symbol selector
         available_symbols = config_manager.get_available_trading_symbols()
@@ -93,54 +65,20 @@ def main():
             st.warning("Please select at least one symbol to trade.")
             return
 
-        # Currency allocations
-        currency_allocations = {}
-        for symbol in user_selected_symbols:
-            allocation = st.sidebar.slider(
-                f"Allocation for {symbol} (%)",
-                min_value=0.0,
-                max_value=100.0,
-                value=100.0 / len(user_selected_symbols),
-                step=0.1
-            )
-            currency_allocations[symbol] = allocation / 100.0
-
-        # Normalize allocations
-        total_allocation = sum(currency_allocations.values())
-        if total_allocation != 0:
-            currency_allocations = {symbol: alloc / total_allocation for symbol, alloc in currency_allocations.items()}
-
-        ui_manager.display_component('currency_allocation_display', allocations=currency_allocations)
-
         # Save user inputs
         st.session_state.user_inputs = {
             'user_selected_symbols': user_selected_symbols,
             'profit_margin_percentage': profit_margin_percentage,
             'max_total_orders': max_total_orders,
-            'usdt_liquid_percentage': usdt_liquid_percentage,
-            'currency_allocations': currency_allocations,
+            'liquid_ratio': liquid_ratio,
         }
 
         # Update bot configuration
         bot.max_total_orders = max_total_orders
         bot.update_allocations(user_selected_symbols)
-        bot.wallet.set_currency_allocations(currency_allocations)
+        bot.wallet.set_currency_allocations({symbol: 1/len(user_selected_symbols) for symbol in user_selected_symbols})
 
-        # Live trading verification
-        if not is_simulation:
-            if not ui_manager.display_component('live_trading_verification'):
-                st.warning("Live trading access not verified. Please enter the correct access key.")
-                return
-
-            # Initialize KuCoin client for live trading
-            api_key = st.secrets["api_credentials"]["api_key"]
-            api_secret = st.secrets["api_credentials"]["api_secret"]
-            api_passphrase = st.secrets["api_credentials"]["api_passphrase"]
-            kucoin_client = Client(api_key, api_secret, api_passphrase)
-            bot.set_kucoin_client(kucoin_client)
-
-        # Move trading controls to the bottom of the sidebar
-        st.sidebar.markdown("---")  # Add a separator
+        # Trading controls
         start_button, stop_button = ui_manager.display_component('trading_controls')
 
         if start_button and not st.session_state.is_trading:
