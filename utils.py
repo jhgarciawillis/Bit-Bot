@@ -1,6 +1,6 @@
 import logging
 from typing import Any, Callable
-from kucoin.client import Trade as KucoinClient
+from kucoin.client import Trade
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class KucoinClientManager:
     def initialize(self, api_key: str, api_secret: str, api_passphrase: str) -> None:
         try:
             logger.info("Initializing KuCoin client")
-            self.client = Client(
+            self.client = Trade(
                 api_key=api_key,
                 api_secret=api_secret,
                 passphrase=api_passphrase,
@@ -46,7 +46,7 @@ class KucoinClientManager:
             logger.error(f"Failed to initialize KuCoin client: {e}")
             raise
 
-    def get_client(self) -> Client:
+    def get_client(self) -> Trade:
         return self.client
 
 def create_simulated_trade_client(fees: dict, max_orders: int, allocations: dict) -> SimulatedTradeClient:
