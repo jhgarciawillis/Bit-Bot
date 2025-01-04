@@ -5,7 +5,7 @@ from statistics import mean, stdev
 from typing import Dict, List, Optional, Tuple
 from wallet import create_wallet
 from config import config_manager
-from kucoin.client import Client
+from kucoin.client import Trade
 from utils import handle_trading_errors
 
 logger = logging.getLogger(__name__)
