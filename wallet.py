@@ -6,13 +6,6 @@ from kucoin.client import Trade
 
 logger = logging.getLogger(__name__)
 
-class Trade:
-    def __init__(self, timestamp: datetime, amount: float, price: float, fee: float):
-        self.timestamp = timestamp
-        self.amount = amount
-        self.price = price
-        self.fee = fee
-
 class Currency:
     def __init__(self, symbol: str):
         self.symbol: str = symbol
@@ -31,11 +24,13 @@ class Currency:
         timestamp = timestamp or datetime.now()
         trade = Trade(timestamp, amount, price, fee)
         
-        if trade_type == Client.SIDE_BUY:
+        if trade_type == Trade.SIDE_BUY:
             self.buy_history.append(trade)
+            # For buy, amount is already adjusted for fees
             self.balance['trading'] += amount
-        elif trade_type == Client.SIDE_SELL:
+        elif trade_type == Trade.SIDE_SELL:
             self.sell_history.append(trade)
+            # For sell, we're sending the full amount
             self.balance['trading'] -= amount
         
         logger.info(f"Recorded {trade_type}: {self.symbol} - Amount: {amount:.8f}, Price: {price:.4f}, Fee: {fee:.8f}")
@@ -115,8 +110,41 @@ class Wallet:
             logger.warning(f"Invalid account type: {account_type}")
 
     def sync_with_exchange(self, account_type: str) -> None:
-        # Implement syncing wallet balances with the exchange
-        pass
+        if self.is_simulation:
+            logger.warning("Syncing wallet with exchange is not applicable in simulation mode")
+            return
+
+        try:
+            client = config_manager.kucoin_client_manager.get_client()
+            accounts = client.get_accounts(type=Trade.ACCOUNT_TRADE)
+            
+            # Get latest prices for all currencies
+            trading_symbols = {}
+            for account in accounts:
+                symbol = account['currency']
+                if symbol != 'USDT':
+                    trading_symbols[f"{symbol}-USDT"] = symbol
+            
+            # Update prices and balances
+            for symbol, currency in trading_symbols.items():
+                try:
+                    ticker = client.get_ticker(symbol)
+                    price = float(ticker['price'])
+                    self.update_currency_price(account_type, currency, price)
+                except Exception as e:
+                    logger.error(f"Error getting price for {symbol}: {e}")
+
+            # Update account balances
+            for account in accounts:
+                currency = account['currency']
+                total_balance = float(account['balance'])
+                available_balance = float(account['available'])
+                self.update_account_balance(account_type, currency, available_balance, 'trading')
+                self.update_account_balance(account_type, currency, total_balance - available_balance, 'liquid')
+                
+            logger.info(f"Wallet synchronized with exchange for account type: {account_type}")
+        except Exception as e:
+            logger.error(f"Error synchronizing wallet: {e}")
 
     def update_profits(self, symbol: str, profit: float) -> None:
         if symbol not in self.profits:
