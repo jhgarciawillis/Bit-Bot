@@ -4,21 +4,14 @@ from datetime import datetime
 from typing import Dict, List, Any, Tuple, Optional
 import logging
 from config import config_manager
+from utils import handle_errors
 
 logger = logging.getLogger(__name__)
 
-def handle_errors(func):
-    def wrapper(*args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            logger.error(f"An error occurred in {func.__name__}: {str(e)}")
-            raise
-    return wrapper
-
-class Chart:
-    def __init__(self, title: str, x_title: str, y_title: str):
+class CustomChart:
+    def __init__(self, title: str, x_title: str, y_title: str, chart_type: str):
         self.fig = go.Figure()
+        self.chart_type = chart_type
         self.update_layout(title, x_title, y_title)
 
     def update_layout(self, title: str, x_title: str, y_title: str):
@@ -31,56 +24,19 @@ class Chart:
             legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
         )
 
-    def add_line_trace(self, x: List[Any], y: List[Any], name: str):
-        self.fig.add_trace(go.Scatter(x=x, y=y, mode='lines', name=name))
-
-    def add_marker_trace(self, x: List[Any], y: List[Any], name: str, marker_symbol: str, marker_size: int, marker_color: str):
+    def add_trace(self, x: List[Any], y: List[Any], name: str, mode: str = 'lines', color: str = None, symbol: str = None, size: int = None):
         self.fig.add_trace(go.Scatter(
-            x=x, y=y, mode='markers', name=name,
-            marker=dict(symbol=marker_symbol, size=marker_size, color=marker_color)
+            x=x, y=y, mode=mode, name=name,
+            marker=dict(color=color, symbol=symbol, size=size)
         ))
 
-    def add_horizontal_line(self, y: float, line_dash: str, annotation_text: str, line_color: str):
-        self.fig.add_hline(y=y, line_dash=line_dash, annotation_text=annotation_text, line_color=line_color)
+    def show(self):
+        self.fig.show()
 
     @handle_errors
     def save(self, filename: str):
         self.fig.write_image(filename)
         logger.info(f"Chart saved as {filename}")
-
-class PriceChart(Chart):
-    def __init__(self, symbol: str):
-        super().__init__(f'{symbol} Price Chart', 'Timestamp', 'Price (USDT)')
-        self.symbol = symbol
-
-    def add_price_data(self, timestamps: List[datetime], prices: List[float]):
-        self.add_line_trace(timestamps, prices, f'{self.symbol} Price')
-
-    def add_buy_signals(self, buy_timestamps: List[datetime], buy_signals: List[float]):
-        self.add_marker_trace(buy_timestamps, buy_signals, f'{self.symbol} Buy Signal', 'triangle-up', 10, 'green')
-
-    def add_sell_signals(self, sell_timestamps: List[datetime], sell_signals: List[float]):
-        self.add_marker_trace(sell_timestamps, sell_signals, f'{self.symbol} Sell Signal', 'triangle-down', 10, 'red')
-
-    def add_trade_lines(self, buy_price: Optional[float], target_sell_price: Optional[float]):
-        if buy_price is not None and target_sell_price is not None:
-            self.add_horizontal_line(buy_price, "dash", "Buy Price", "blue")
-            self.add_horizontal_line(target_sell_price, "dot", "Target Sell Price", "red")
-
-class ProfitChart(Chart):
-    def __init__(self):
-        super().__init__('Total Profit Over Time', 'Timestamp', 'Total Profit (USDT)')
-
-    def add_profit_data(self, timestamps: List[datetime], total_profits: List[float]):
-        self.add_line_trace(timestamps, total_profits, 'Total Profit')
-
-class BalanceChart(Chart):
-    def __init__(self):
-        super().__init__('Balance Over Time', 'Timestamp', 'Balance (USDT)')
-
-    def add_balance_data(self, timestamps: List[datetime], total_balances: List[float], trading_balances: List[float]):
-        self.add_line_trace(timestamps, total_balances, 'Total Balance')
-        self.add_line_trace(timestamps, trading_balances, 'Trading Balance')
 
 class ChartCreator:
     def __init__(self, bot):
@@ -91,7 +47,6 @@ class ChartCreator:
         return {
             'individual_price_charts': self.create_individual_price_charts(),
             'total_profit': self.create_total_profit_chart(),
-            'balance': self.create_balance_chart()
         }
 
     def create_individual_price_charts(self) -> Dict[str, go.Figure]:
@@ -101,20 +56,21 @@ class ChartCreator:
         price_data = self.bot.price_history.get(symbol, [])
         timestamps, prices = self.extract_price_data(price_data)
         
-        chart = PriceChart(symbol)
-        chart.add_price_data(timestamps, prices)
+        chart = CustomChart(f'{symbol} Price Chart', 'Timestamp', 'Price (USDT)', 'price')
+        chart.add_trace(timestamps, prices, f'{symbol} Price')
         
         buy_timestamps, buy_signals = self.get_buy_signals(symbol, price_data)
-        chart.add_buy_signals(buy_timestamps, buy_signals)
+        chart.add_trace(buy_timestamps, buy_signals, f'{symbol} Buy Signal', mode='markers', color='green', symbol='triangle-up', size=10)
         
         sell_timestamps, sell_signals = self.get_sell_signals(symbol, price_data)
-        chart.add_sell_signals(sell_timestamps, sell_signals)
+        chart.add_trace(sell_timestamps, sell_signals, f'{symbol} Sell Signal', mode='markers', color='red', symbol='triangle-down', size=10)
         
         active_trade = self.get_active_trade(symbol)
         if active_trade:
             buy_price = active_trade['buy_price']
             target_sell_price = buy_price * (1 + self.bot.profit_margin)
-            chart.add_trade_lines(buy_price, target_sell_price)
+            chart.add_trace([timestamps[0], timestamps[-1]], [buy_price, buy_price], 'Buy Price', mode='lines', color='blue')
+            chart.add_trace([timestamps[0], timestamps[-1]], [target_sell_price, target_sell_price], 'Target Sell Price', mode='lines', color='red')
         
         return chart.fig
 
@@ -122,18 +78,8 @@ class ChartCreator:
         timestamps = [status['timestamp'] for status in self.bot.status_history]
         total_profits = [sum(status['profits'].values()) for status in self.bot.status_history]
         
-        chart = ProfitChart()
-        chart.add_profit_data(timestamps, total_profits)
-        
-        return chart.fig
-
-    def create_balance_chart(self) -> go.Figure:
-        timestamps = [status['timestamp'] for status in self.bot.status_history]
-        total_balances = [status['current_total_usdt'] for status in self.bot.status_history]
-        trading_balances = [status['tradable_usdt'] for status in self.bot.status_history]
-        
-        chart = BalanceChart()
-        chart.add_balance_data(timestamps, total_balances, trading_balances)
+        chart = CustomChart('Total Profit Over Time', 'Timestamp', 'Total Profit (USDT)', 'profit')
+        chart.add_trace(timestamps, total_profits, 'Total Profit')
         
         return chart.fig
 
@@ -164,7 +110,6 @@ class ChartCreator:
         return next((trade for trade in self.bot.active_trades.values() if trade['symbol'] == symbol), None)
 
     def update_bot_data(self, bot):
-        """Update the bot instance with fresh data"""
         self.bot = bot
 
 @handle_errors
