@@ -32,14 +32,14 @@ class KucoinClientManager:
             cls._instance.client = None
         return cls._instance
 
-    def initialize(self, api_key: str, api_secret: str, api_passphrase: str) -> None:
+    def initialize(self, key: str, secret: str, passphrase: str) -> None:
         try:
             logger.info("Initializing KuCoin client")
             self.client = Trade(
-                api_key=api_key,
-                api_secret=api_secret,
-                passphrase=api_passphrase,
-                sandbox=False
+                key=key,
+                secret=secret,
+                passphrase=passphrase,
+                is_sandbox=False
             )
             # Test connection
             self.client.get_timestamp()
