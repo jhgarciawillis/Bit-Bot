@@ -38,8 +38,7 @@ class KucoinClientManager:
             self.client = Trade(
                 key=key,
                 secret=secret,
-                passphrase=passphrase,
-                is_sandbox=False
+                passphrase=passphrase
             )
             # Test connection
             self.client.get_timestamp()
