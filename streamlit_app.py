@@ -12,12 +12,21 @@ from ui_components import UIManager
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def initialize_session_state() -> None:
-    logger.info("Initializing session state.")
-    if 'trade_messages' not in st.session_state:
-        st.session_state.trade_messages = []
-    if 'error_message' not in st.session_state:
-        st.session_state.error_message = ""
+def initialize_bot(is_simulation: bool, liquid_ratio: float, initial_balance: float) -> TradingBot:
+    logger.info("Initializing bot...")
+    bot = st.session_state.get('bot')
+    if bot is None:
+        logger.info("Creating a new bot instance.")
+        bot = TradingBot(config_manager.get_config('bot_config')['update_interval'], liquid_ratio)
+        st.session_state['bot'] = bot
+    else:
+        logger.info("Using existing bot instance.")
+    
+    bot.is_simulation = is_simulation
+    bot.initialize()
+    
+    logger.info("Bot initialized successfully.")
+    return bot
 
 def main():
     logger.info("Starting main function...")
@@ -29,9 +38,10 @@ def main():
 
     try:
         logger.info("Initializing KuCoin client...")
-        config_manager.initialize_kucoin_client()
+        if not config_manager.get_config('simulation_mode')['enabled']:
+            config_manager.initialize_kucoin_client()
         logger.info("Initializing session state...")
-        initialize_session_state()
+        ui_manager.initialize()
 
         if 'is_trading' not in st.session_state:
             st.session_state.is_trading = False
@@ -49,8 +59,7 @@ def main():
             return
 
         # Initialize bot
-        bot = TradingBot(config_manager.get_config('bot_config')['update_interval'], liquid_ratio)
-        bot.initialize()
+        bot = initialize_bot(is_simulation, liquid_ratio, initial_balance)
         ui_manager.bot = bot  # Update UI manager with the initialized bot
 
         # Symbol selector
