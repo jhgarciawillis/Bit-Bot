@@ -22,11 +22,15 @@ class TradingBot:
         self.total_trades: int = 0
         self.status_history: List[Dict] = []
         self.is_simulation: bool = False
-        self.profit_margin: float = config_manager.get_config('profit_margin')
         self.trade_client: Optional[Union[Trade, SimulatedTradeClient]] = None
         self.max_total_orders: int = config_manager.get_max_total_orders()
         self.currency_allocations: Dict[str, float] = config_manager.get_currency_allocations()
         self.active_orders: Dict[str, List[Dict]] = {}
+
+        # Fees and profit margin
+        self.taker_fee: float = config_manager.get_taker_fee()
+        self.maker_fee: float = config_manager.get_maker_fee()
+        self.profit_margin: float = config_manager.get_profit_margin()
 
     def initialize(self) -> None:
         self.is_simulation = config_manager.get_config('simulation_mode')['enabled']
@@ -96,20 +100,29 @@ class TradingBot:
         total_orders = sum(len(orders) for orders in self.active_orders.values())
         return total_orders < self.max_total_orders
 
+    def calculate_target_sell_price(self, buy_price: float) -> float:
+        actual_cost = buy_price * (1 + self.taker_fee)
+        target_revenue = actual_cost * (1 + self.profit_margin)
+        target_sell_price = target_revenue / (1 - self.taker_fee)
+        return target_sell_price
+
     @handle_trading_errors
     def place_buy_order(self, symbol: str, amount_usdt: float, limit_price: float) -> Optional[Dict]:
         if not self.can_place_order(symbol) or amount_usdt > self.get_balance('USDT', 'trading'):
             return None
         
         try:
+            # Adjust the buy amount considering the taker fee
+            buy_amount_with_fee = amount_usdt / (1 + self.taker_fee)
+            
             order = self.trade_client.create_limit_order(
                 symbol=symbol,
                 side=Trade.SIDE_BUY,
                 price=str(limit_price),
-                size=str(amount_usdt / limit_price),
+                size=str(buy_amount_with_fee / limit_price),
             )
             if order:
-                self._process_order_response(order, 'buy', symbol, amount_usdt / limit_price, limit_price)
+                self._process_order_response(order, 'buy', symbol, buy_amount_with_fee / limit_price, limit_price)
             return order
         except Exception as e:
             logger.error(f"Error placing buy order: {e}")
@@ -147,10 +160,6 @@ class TradingBot:
         if symbol not in self.active_orders:
             self.active_orders[symbol] = []
         self.active_orders[symbol].append(order)
-
-    def calculate_target_sell_price(self, buy_price: float) -> float:
-        target_sell_price = buy_price * (1 + self.profit_margin)
-        return target_sell_price
 
     def calculate_profit(self, buy_order: Dict, sell_order: Dict) -> float:
         buy_amount_usdt = float(buy_order['dealFunds'])
