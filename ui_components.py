@@ -36,14 +36,14 @@ class SidebarControls(UIComponent):
                 return None, None, None, None, None
             simulated_usdt_balance = None
             
-        usdt_liquid_percentage = st.sidebar.number_input(
+        liquid_ratio = st.sidebar.number_input(
             "Enter the percentage of your assets to keep liquid in USDT (0-100%)",
             min_value=0.0,
             max_value=100.0,
             value=config_manager.get_config('liquid_ratio', 0.5) * 100,
             step=0.0001,
             format="%.4f",
-            key='usdt_liquid_percentage'
+            key='liquid_ratio'
         ) / 100
 
         profit_margin_percentage = st.sidebar.number_input(
@@ -64,7 +64,7 @@ class SidebarControls(UIComponent):
             key='max_total_orders'
         )
 
-        return is_simulation, simulated_usdt_balance, usdt_liquid_percentage, profit_margin_percentage, max_total_orders
+        return is_simulation, simulated_usdt_balance, liquid_ratio, profit_margin_percentage, max_total_orders
 
 class StatusTable(UIComponent):
     def __init__(self, bot):
