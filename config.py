@@ -2,13 +2,14 @@ import logging
 from typing import Dict, Any
 import streamlit as st
 from utils import KucoinClientManager
+from simulated_trade_client import SimulatedTradeClient
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG = {
     'trading_symbols': ['BTC-USDT', 'ETH-USDT', 'XRP-USDT', 'ADA-USDT', 'DOT-USDT'],
-    'profit_margin': 0.002,  # 0.2%
+    'profit_margin': 0.05,  # 5%
     'liquid_ratio': 0.5,  # 50%
     'simulation_mode': {
         'enabled': True,
@@ -70,27 +71,70 @@ class ConfigManager:
         pass
 
     def validate_trading_symbols(self, symbols: list) -> list:
-        # Implement trading symbol validation
-        return symbols
+        available_symbols = self.get_available_trading_symbols()
+        valid_symbols = [symbol for symbol in symbols if symbol in available_symbols]
+        if len(valid_symbols) != len(symbols):
+            logger.warning(f"Some trading symbols are not available: {set(symbols) - set(valid_symbols)}")
+        return valid_symbols
 
     def get_available_trading_symbols(self) -> list:
-        # Implement fetching available trading symbols from the exchange
-        return []
+        try:
+            client = kucoin_client_manager.get_client()
+            symbols = client.get_symbols()
+            return [
+                symbol['symbol'] for symbol in symbols 
+                if (symbol.get('quoteCurrency') == 'USDT' and 
+                    symbol.get('enableTrading'))
+            ]
+        except Exception as e:
+            logger.error(f"Error fetching symbols: {e}")
+            return []
 
     def fetch_real_time_prices(self, symbols: list) -> dict:
-        # Implement fetching real-time prices for given symbols
-        return {}
+        prices = {}
+        try:
+            client = kucoin_client_manager.get_client()
+            for symbol in symbols:
+                ticker = client.get_ticker(symbol)
+                prices[symbol] = float(ticker['price'])
+        except Exception as e:
+            logger.error(f"Error fetching prices: {e}")
+        return prices
 
     def place_spot_order(self, symbol: str, side: str, price: float, size: float, is_simulation: bool = False) -> Dict[str, Any]:
-        # Implement placing a spot order
-        return {}
+        try:
+            if is_simulation:
+                simulated_client = self.create_simulated_trade_client(
+                    self.config['fees'],
+                    self.config['max_total_orders'],
+                    self.config['currency_allocations']
+                )
+                order = simulated_client.create_limit_order(
+                    symbol=symbol,
+                    side=side,
+                    price=str(price),
+                    size=str(size)
+                )
+            else:
+                client = kucoin_client_manager.get_client()
+                order = client.create_limit_order(
+                    symbol=symbol,
+                    side=side,
+                    price=str(price),
+                    size=str(size),
+                    timeInForce=Client.TIMEINFORCE_GOOD_TILL_CANCELLED
+                )
+            return order
+        except Exception as e:
+            logger.error(f"Error placing order: {e}")
+            return {}
 
     def initialize_kucoin_client(self) -> None:
         try:
             kucoin_client_manager.initialize(
-                st.secrets["api_credentials"]["api_key"],
-                st.secrets["api_credentials"]["api_secret"],
-                st.secrets["api_credentials"]["api_passphrase"]
+                key=st.secrets["api_credentials"]["api_key"],
+                secret=st.secrets["api_credentials"]["api_secret"],
+                passphrase=st.secrets["api_credentials"]["api_passphrase"]
             )
             self.client = kucoin_client_manager.get_client()
         except KeyError as e:
@@ -109,5 +153,24 @@ class ConfigManager:
     def get_currency_allocations(self) -> Dict[str, float]:
         return self.config['currency_allocations']
 
+    def create_simulated_trade_client(self, fees: Dict[str, float], max_total_orders: int, currency_allocations: Dict[str, float]) -> SimulatedTradeClient:
+        return SimulatedTradeClient(fees, max_total_orders, currency_allocations)
+
+    def get_taker_fee(self) -> float:
+        return self.config['fees']['taker']
+
+    def get_maker_fee(self) -> float:
+        return self.config['fees']['maker']
+
+    def get_profit_margin(self) -> float:
+        return self.config['profit_margin']
+
 config_manager = ConfigManager()
 kucoin_client_manager = KucoinClientManager()
+
+if __name__ == "__main__":
+    logger.info("Running config.py as main script")
+    symbols = config_manager.get_available_trading_symbols()
+    logger.info(f"Available trading symbols: {symbols}")
+    prices = config_manager.fetch_real_time_prices(config_manager.config['trading_symbols'])
+    logger.info(f"Current prices: {prices}")
