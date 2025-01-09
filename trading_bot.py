@@ -2,11 +2,12 @@ import logging
 from datetime import datetime
 from collections import deque
 from statistics import mean, stdev
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 from wallet import create_wallet
 from config import config_manager
-from kucoin.client import Trade
 from utils import handle_trading_errors
+from kucoin.client import Trade
+from simulated_trade_client import SimulatedTradeClient
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class TradingBot:
         self.status_history: List[Dict] = []
         self.is_simulation: bool = False
         self.profit_margin: float = config_manager.get_config('profit_margin')
-        self.kucoin_client: Optional[Client] = None
+        self.trade_client: Optional[Union[Trade, SimulatedTradeClient]] = None
         self.max_total_orders: int = config_manager.get_max_total_orders()
         self.currency_allocations: Dict[str, float] = config_manager.get_currency_allocations()
         self.active_orders: Dict[str, List[Dict]] = {}
@@ -36,8 +37,14 @@ class TradingBot:
         self.wallet.set_currency_allocations(self.currency_allocations)
         
         if not self.is_simulation:
-            self.kucoin_client = config_manager.kucoin_client_manager.get_client()
+            self.trade_client = config_manager.kucoin_client_manager.get_client()
             self.update_wallet_balances()
+        else:
+            self.trade_client = config_manager.create_simulated_trade_client(
+                config_manager.get_config('fees'),
+                self.max_total_orders,
+                self.currency_allocations
+            )
         
         logger.info("Bot initialized successfully.")
         
@@ -95,15 +102,14 @@ class TradingBot:
             return None
         
         try:
-            order = config_manager.place_spot_order(
+            order = self.trade_client.create_limit_order(
                 symbol=symbol,
-                side=Client.SIDE_BUY,
-                price=limit_price,
-                size=amount_usdt/limit_price,
-                is_simulation=self.is_simulation
+                side=Trade.SIDE_BUY,
+                price=str(limit_price),
+                size=str(amount_usdt / limit_price),
             )
             if order:
-                self._process_order_response(order, 'buy', symbol, amount_usdt/limit_price, limit_price)
+                self._process_order_response(order, 'buy', symbol, amount_usdt / limit_price, limit_price)
             return order
         except Exception as e:
             logger.error(f"Error placing buy order: {e}")
@@ -115,12 +121,11 @@ class TradingBot:
             return None
         
         try:
-            order = config_manager.place_spot_order(
+            order = self.trade_client.create_limit_order(
                 symbol=symbol,
-                side=Client.SIDE_SELL,
-                price=target_sell_price,
-                size=amount_crypto,
-                is_simulation=self.is_simulation
+                side=Trade.SIDE_SELL,
+                price=str(target_sell_price),
+                size=str(amount_crypto),
             )
             if order:
                 self._process_order_response(order, 'sell', symbol, amount_crypto, target_sell_price)
@@ -130,7 +135,7 @@ class TradingBot:
             return None
 
     def _process_order_response(self, order: Dict, side: str, symbol: str, amount: float, price: float) -> None:
-        if side == Client.SIDE_BUY:
+        if side == Trade.SIDE_BUY:
             self.active_trades[order['orderId']] = {
                 'symbol': symbol,
                 'buy_price': float(price),
