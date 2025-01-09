@@ -11,10 +11,12 @@ from utils import handle_trading_errors
 logger = logging.getLogger(__name__)
 
 class TradingLoop:
-    def __init__(self, bot: TradingBot, chosen_symbols: List[str], profit_margin: float):
+    def __init__(self, bot: TradingBot, chosen_symbols: List[str], profit_margin: float, taker_fee: float, maker_fee: float):
         self.bot = bot
         self.chosen_symbols = chosen_symbols
         self.profit_margin = profit_margin if profit_margin is not None else config_manager.get_config('profit_margin')
+        self.taker_fee = taker_fee
+        self.maker_fee = maker_fee
 
     @handle_trading_errors
     def run(self, stop_event: threading.Event) -> None:
@@ -117,9 +119,12 @@ class TradingLoop:
         except Exception as e:
             logger.error(f"Error updating bot status: {e}")
 
-def initialize_trading_loop(bot: TradingBot, chosen_symbols: List[str], profit_margin: float) -> Tuple[threading.Event, threading.Thread]:
+def initialize_trading_loop(bot: TradingBot, chosen_symbols: List[str]) -> Tuple[threading.Event, threading.Thread]:
     stop_event = threading.Event()
-    trading_loop = TradingLoop(bot, chosen_symbols, profit_margin)
+    profit_margin = bot.profit_margin
+    taker_fee = bot.taker_fee
+    maker_fee = bot.maker_fee
+    trading_loop = TradingLoop(bot, chosen_symbols, profit_margin, taker_fee, maker_fee)
     trading_thread = threading.Thread(target=trading_loop.run, args=(stop_event,), daemon=True)
     trading_thread.start()
     return stop_event, trading_thread
